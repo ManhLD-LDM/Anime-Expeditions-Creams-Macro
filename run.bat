@@ -2,20 +2,28 @@
 setlocal
 cd /d "%~dp0"
 
-where python >nul 2>nul
-if %errorlevel%==0 (
-    python main.py
+if exist ".venv\Scripts\python.exe" (
+    ".venv\Scripts\python.exe" main.py
+    set RUN_EXIT=%errorlevel%
+) else if exist "venv\Scripts\python.exe" (
+    "venv\Scripts\python.exe" main.py
     set RUN_EXIT=%errorlevel%
 ) else (
-    where py >nul 2>nul
+    where python >nul 2>nul
     if %errorlevel%==0 (
-        py main.py
+        python main.py
         set RUN_EXIT=%errorlevel%
     ) else (
-        echo Python not found on PATH. Install Python from python.org and try again.
-        pause
-        endlocal
-        exit /b 1
+        where py >nul 2>nul
+        if %errorlevel%==0 (
+            py main.py
+            set RUN_EXIT=%errorlevel%
+        ) else (
+            echo Python not found on PATH. Install Python from python.org and try again.
+            pause
+            endlocal
+            exit /b 1
+        )
     )
 )
 

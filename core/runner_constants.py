@@ -312,32 +312,18 @@ ACT_ROW_HEIGHT = 129
 # map carousel and no difficulty picker -- picking the Act IS the whole
 # selection, so it goes straight from the Act to the Solo/Matchmaking tail
 # (nav_select_stage + nav_start, or enter_matchmaking) the other modes share.
-# The image folder names are exactly as they ship under Assets/ui/ -- the
-# mixed "villian"/"villain" spelling is intentional, it matches the real
-# folders. Mirrors TASK_DATA.event.stages in ui/app.js.
-# Act 4 (Villian Invasion "Crow - Dawn") is a relic-gated Act: it costs 1 Crow
-# Relic to enter, so its card shows locked ("0/1x Owned", VILLIAN4_CLOSE_IMAGE)
-# until you've banked one. It's selectable now, and farm tasks can auto-divert
-# to it when a relic drops (see runner._run_act4_diversion / DROP_RELIC_IMAGE).
-EVENT_ACT_ORDER = ["1", "2", "3", "4"]
-# Values are a tuple of candidate crops per Act (any match wins), so an Act
-# card that shows in more than one visual state can be matched in whichever
-# it's currently in.
+# Summer Event: Tidal Siege mode selections.
+# Mirrors TASK_DATA.event.stages in ui/app.js.
+EVENT_BANNER_IMAGES = ("tidal_siege", "Villain_Invasion")
+EVENT_ACT_ORDER = ["Event Mode", "Portal Mode"]
+# Values are a tuple of candidate crops per mode (any match wins)
 EVENT_ACT_IMAGES = {
-    "1": ("villian1",),
-    "2": ("villian2",),
-    "3": ("villain3",),
-    "4": ("villian4",),
+    "Event Mode": ("event_mode",),
+    "Portal Mode": ("event_portal_mode",),
 }
-# Acts from this one on can sit below the fold on the Event gamemode screen
-# and only come into view by scrolling the villain list -- picking one of
-# these runs the same wheel-scroll search Story maps use (see
-# _reach_event_act_selected / _scroll_find_and_click). Acts before it are
-# already on screen and get a plain wait-then-click. The scroll search checks
-# what's already visible first, so it's a no-op for an Act that didn't need
-# scrolling anyway.
-EVENT_ACT_SCROLL_FROM_INDEX = 2  # 0-based into EVENT_ACT_ORDER: index 2 == Act "3"
-EVENT_SCREEN_TIMEOUT = 10.0  # how long to wait for each Event screen (nav_event / event_gamemode / the Act card) to appear
+# Both modes are on screen at once (Mode Selection has 2 cards), so no scrolling needed
+EVENT_ACT_SCROLL_FROM_INDEX = 2
+EVENT_SCREEN_TIMEOUT = 10.0  # how long to wait for each Event screen (nav_event / banner / event_gamemode / the mode card) to appear
 
 # Tournament mode: reached through Play like Story/Raid -- its nav_tournament
 # button sits on the same gamemode menu (picked instead of Story), NOT via its

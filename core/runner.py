@@ -3979,30 +3979,21 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
 
     def _reach_event_act_selected(self, hwnd, stop_event: threading.Event, act: str,
                                     scroll_power: int = None, scroll_nudges: int = None) -> bool:
-        """Lobby -> Event -> Villian Invasion -> Event gamemode -> Act (villain card), as one
-        restartable unit -- Event's equivalent of _reach_map_selected. Event
-        has its OWN lobby entry (the nav_event button), not the Play ->
-        gamemode -> map flow the other modes share, so there's no gamemode
-        menu or map carousel here: click nav_event, click Villian Invasion,
-        click the event_gamemode card, then the chosen Act's villain card. On
-        any failure it backs out to the lobby (_spam_back_until_gone) so the
-        next attempt starts clean, same as the map path does.
-
-        The first couple of Act cards are on screen already; later ones
-        (EVENT_ACT_SCROLL_FROM_INDEX on) sit below the fold and only come into
-        view by scrolling, so those get the same wheel-scroll search the Story
-        map carousel uses (see _scroll_find_and_click) instead of a plain
-        wait-then-click.
+        """Lobby -> Event -> Tidal Siege -> Event gamemode -> Mode Selection (Event Mode / Portal Mode),
+        as one restartable unit -- Event's equivalent of _reach_map_selected.
         """
         act = str(act)
+        # Normalize legacy Act 1-4 to the new 2-mode system
+        if act in ("1", "3") or not act:
+            act = "Event Mode"
+        elif act in ("2", "4"):
+            act = "Portal Mode"
+        elif act not in EVENT_ACT_ORDER:
+            act = EVENT_ACT_ORDER[0]
+
         act_images = EVENT_ACT_IMAGES.get(act)
-        # Both structures are checked, not just the images: EVENT_ACT_ORDER is
-        # indexed further down to decide whether the card needs scrolling to,
-        # so an act present in one but not the other would raise ValueError
-        # mid-navigation rather than failing cleanly here. They're hand-synced
-        # and Act 4 is queued to be added, so it's worth not depending on that.
         if act_images is None or act not in EVENT_ACT_ORDER:
-            self._log(f'[Macro] Unknown Event Act "{act}" -- expected one of {EVENT_ACT_ORDER}.')
+            self._log(f'[Macro] Unknown Event Mode "{act}" -- expected one of {EVENT_ACT_ORDER}.')
             return False
         if isinstance(act_images, str):
             act_images = (act_images,)
@@ -4012,10 +4003,7 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
         if self._checkpoint(stop_event):
             return False
 
-        # nav_event: the lobby's Event button (its own nav entry, not under
-        # Play). Each image click below is a wait-then-click with a
-        # focus-safe verify via _click_found_image, and each screen animates
-        # in, so a short settle follows before searching the next one.
+        # nav_event: the lobby's Event button (its own nav entry, not under Play).
         self._set_status(action="Clicking Event...")
         if self._click_found_image(hwnd, "nav_event", EVENT_SCREEN_TIMEOUT, stop_event) is None:
             self._spam_back_until_gone(hwnd, stop_event)
@@ -4024,9 +4012,13 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
             return False
         time.sleep(SETTLE_DELAY)
 
-        # (1) Click Villain Invasion from the event menu
-        self._set_status(action="Clicking Villain Invasion...")
-        match = self._click_found_image(hwnd, "Villain_Invasion", EVENT_SCREEN_TIMEOUT, stop_event)
+        # (1) Click Tidal Siege (or fallback Villain Invasion) from the event menu
+        self._set_status(action="Clicking Event banner...")
+        match = None
+        for banner in EVENT_BANNER_IMAGES:
+            match = self._click_found_image(hwnd, banner, EVENT_SCREEN_TIMEOUT, stop_event)
+            if match is not None:
+                break
         if match is None:
             self._spam_back_until_gone(hwnd, stop_event)
             return False
@@ -4034,10 +4026,8 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
             return False
         time.sleep(SETTLE_DELAY)
 
-        # (2) Then the event_gamemode image (the button with the "Event
-        # Gamemode" text) -- the click that actually opens the villain list,
-        # found and clicked by image search. Its absence after the card click
-        # is the sign the card click failed (spam back + retry from lobby).
+        # (2) Then the event_gamemode image (the button with "Event Gamemode" text)
+        self._set_status(action="Clicking Event Gamemode...")
         if self._click_found_image(hwnd, "event_gamemode", EVENT_SCREEN_TIMEOUT, stop_event) is None:
             self._spam_back_until_gone(hwnd, stop_event)
             return False
@@ -4045,21 +4035,19 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
             return False
         time.sleep(SETTLE_DELAY)
 
-        self._set_status(action=f"Clicking Act {act}...")
+        # (3) Click chosen mode card (Event Mode or Portal Mode)
+        self._set_status(action=f"Clicking {act}...")
         needs_scroll = EVENT_ACT_ORDER.index(act) >= EVENT_ACT_SCROLL_FROM_INDEX
         if needs_scroll:
-            # Act 3+ is below the fold -- scroll the villain list into view
-            # (Story-carousel style) before clicking it.
             if not self._scroll_find_and_click(hwnd, act_images, stop_event, scroll_power, scroll_nudges,
-                                                 label=f"Act {act}"):
+                                                 label=f"Event Mode {act}"):
                 self._spam_back_until_gone(hwnd, stop_event)
                 return False
         elif self._click_found_image(hwnd, act_images[0], EVENT_SCREEN_TIMEOUT, stop_event) is None:
             self._spam_back_until_gone(hwnd, stop_event)
             return False
-        # Let the stage/Enter-Matchmaking screen finish animating in before
-        # the shared tail searches for its confirm button (same reason
-        # _select_stage settles after its own click).
+
+        # Let the stage/Enter-Matchmaking screen finish animating in
         time.sleep(SETTLE_DELAY)
         return not self._checkpoint(stop_event)
 

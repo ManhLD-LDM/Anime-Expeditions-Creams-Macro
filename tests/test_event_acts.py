@@ -6,11 +6,9 @@ from core import runner_constants as rc
 
 
 def test_event_act_images_and_order_stay_in_sync():
-    """_reach_event_act_selected looks an act up in EVENT_ACT_IMAGES, then
-    indexes EVENT_ACT_ORDER to decide whether the card needs scrolling to. An
-    act in one but not the other raises ValueError mid-navigation, so the two
-    have to be edited together -- this fails the moment they drift, which is
-    exactly what adding Act 4 to one and forgetting the other looks like."""
+    """_reach_event_act_selected looks a mode up in EVENT_ACT_IMAGES, then
+    indexes EVENT_ACT_ORDER. An act in one but not the other raises ValueError
+    mid-navigation, so the two have to be edited together."""
     assert set(rc.EVENT_ACT_IMAGES) == set(rc.EVENT_ACT_ORDER)
 
 
@@ -21,10 +19,11 @@ def test_event_act_scroll_index_is_within_the_order():
 def test_every_event_act_has_at_least_one_candidate_crop():
     for act, images in rc.EVENT_ACT_IMAGES.items():
         candidates = (images,) if isinstance(images, str) else images
-        assert candidates, f"Act {act} has no reference crop names"
-        assert all(isinstance(n, str) and n for n in candidates), f"Act {act} has a bad crop name"
+        assert candidates, f"Mode {act} has no reference crop names"
+        assert all(isinstance(n, str) and n for n in candidates), f"Mode {act} has a bad crop name"
 
-def test_reach_event_act_selected_clicks_villian_invasion_between_event_and_gamemode(monkeypatch):
+
+def test_reach_event_act_selected_clicks_tidal_siege_between_event_and_gamemode(monkeypatch):
     runner = object.__new__(MacroRunner)
     events = []
 
@@ -46,19 +45,19 @@ def test_reach_event_act_selected_clicks_villian_invasion_between_event_and_game
     monkeypatch.setattr(runner_module.wm, "get_window_rect_screen", lambda hwnd: (0, 0, 0, 0))
     monkeypatch.setattr(runner_module.time, "sleep", lambda seconds: None)
 
-    assert runner._reach_event_act_selected(hwnd=123, stop_event=threading.Event(), act="1") is True
+    assert runner._reach_event_act_selected(hwnd=123, stop_event=threading.Event(), act="Event Mode") is True
     assert [event[1] for event in events if event[0] == "image"] == [
-        "nav_event", "Villain_Invasion", "event_gamemode", "villian1"
+        "nav_event", "tidal_siege", "event_gamemode", "event_mode"
     ]
     assert events == [
         ("image", "nav_event"),
-        ("image", "Villain_Invasion"),
+        ("image", "tidal_siege"),
         ("image", "event_gamemode"),
-        ("image", "villian1"),
+        ("image", "event_mode"),
     ]
 
 
-def test_reach_event_act_selected_backs_out_when_villain_invasion_missing(monkeypatch):
+def test_reach_event_act_selected_backs_out_when_banner_missing(monkeypatch):
     runner = object.__new__(MacroRunner)
     clicked = []
     backs = []
@@ -76,6 +75,6 @@ def test_reach_event_act_selected_backs_out_when_villain_invasion_missing(monkey
     runner._click_found_image = click_found_image
     monkeypatch.setattr(runner_module.time, "sleep", lambda seconds: None)
 
-    assert runner._reach_event_act_selected(hwnd=456, stop_event=threading.Event(), act="1") is False
-    assert clicked == ["nav_event", "Villain_Invasion"]
+    assert runner._reach_event_act_selected(hwnd=456, stop_event=threading.Event(), act="Event Mode") is False
+    assert clicked == ["nav_event", "tidal_siege", "Villain_Invasion"]
     assert backs == [456]

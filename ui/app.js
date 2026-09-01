@@ -317,6 +317,32 @@ async function manualCheckForUpdate() {
   }
 }
 
+async function triggerResetCamera() {
+  const btn = document.getElementById('btn-reset-cam');
+  const btnText = document.getElementById('reset-cam-text');
+  const btnIcon = document.getElementById('reset-cam-icon');
+  if (!btn) return;
+
+  const origText = btnText ? btnText.textContent : 'Reset Cam';
+  if (btnText) btnText.textContent = 'Resetting...';
+  if (btnIcon) btnIcon.classList.add('spinning');
+  btn.disabled = true;
+
+  try {
+    if (window.pywebview && pywebview.api && pywebview.api.debug_camera_setup) {
+      await pywebview.api.debug_camera_setup();
+    }
+  } catch (e) {
+    console.error('Camera reset error:', e);
+  } finally {
+    setTimeout(() => {
+      if (btnText) btnText.textContent = origText;
+      if (btnIcon) btnIcon.classList.remove('spinning');
+      btn.disabled = false;
+    }, 2800);
+  }
+}
+
 let updateProgressPoll = null;
 
 function resetUpdateModalButtons() {
@@ -2170,17 +2196,11 @@ const TASK_DATA = {
   },
   event: {
     label: 'Event',
-    // Event has its own lobby entry (nav_event -> event_gamemode -> Act),
-    // no map carousel and no difficulty picker -- just one of the Acts (each a
-    // villain), then Solo/Matchmaking. Stored in `stage` (values '1'-'4')
-    // the same way Raid stores its Acts, so it reuses the existing
-    // stage/act plumbing. Acts past the second are reached by scrolling the
-    // villain list (see runner._reach_event_act_selected). Act 4 ("Crow -
-    // Dawn") is relic-gated -- pick it to run it directly, or let a farm task
-    // auto-divert to it on a Crow Relic drop (see the Act 4 controls the Task
-    // Builder adds for event tasks). Mirrors core.runner_constants'
-    // EVENT_ACT_ORDER.
-    stages: ['1', '2', '3', '4'],
+    // Event has its own lobby entry (nav_event -> Tidal Siege banner ->
+    // event_gamemode -> Mode Selection), no map carousel and no difficulty
+    // picker. Modes: 'Event Mode' (Infinite & Fishing) or 'Portal Mode'.
+    // Mirrors core.runner_constants' EVENT_ACT_ORDER.
+    stages: ['Event Mode', 'Portal Mode'],
     isEvent: true,
   },
   tournament: {
@@ -2762,7 +2782,7 @@ function taskSummary(t) {
   } else if (t.mode === 'expedition' || t.mode === 'tournament') {
     title += ` · ${t.map}`;
   } else if (t.mode === 'event') {
-    title += ` · Act ${t.stage}`;
+    title += ` · ${t.stage || 'Event Mode'}`;
   }
   const specialStage = t.mode === 'story' && (t.stage === 'Infinite' || t.stage === 'Mastery');
   const diff = ((t.mode === 'story' && !specialStage) || t.mode === 'expedition') ? t.difficulty
@@ -2856,7 +2876,7 @@ function renderTaskBuilder() {
   } else if (t.mode === 'expedition') {
     fields.push(field('Expedition', sel('map', d.maps, null, 'Select Expedition map')));
   } else if (t.mode === 'event') {
-    fields.push(field('Act', sel('stage', d.stages, s => 'Act ' + s, 'Select Event Act 1-4'), 'Select Event Act 1-4'));
+    fields.push(field('Mode', sel('stage', d.stages, null, 'Select Event Mode: Event Mode or Portal Mode'), 'Select Event Mode'));
   } else if (t.mode === 'tournament') {
     fields.push(field('Type', sel('map', d.maps, null, 'Select the Tournament type to enter'), 'Select the Tournament type to enter'));
   } else if (t.mode === 'tower') {
@@ -2910,55 +2930,14 @@ function renderTaskBuilder() {
     </select>`;
   fields.push(field('Macro Operation', macroSel, 'Select a pre-start placement macro template'));
 
-  // Event farm tasks (Acts 1-3) can auto-divert to Villian Invasion Act 4
-  // ("Crow - Dawn") when a Crow Relic drops. Not shown on an Act 4 task
-  // itself -- there's nothing to divert TO. Act 4 needs its own Macro
-  // Operation since it plays nothing like Acts 1-3.
-  if (t.mode === 'event' && t.stage !== '4') {
-    const on = !!t.act4_on_drop;
-    const onOffSeg = `
-      <div class="seg-toggle">
-        <button type="button" class="seg-btn ${on ? 'active' : ''}" onclick="setTaskProp('${t.id}', 'act4_on_drop', true); renderTaskBuilder()">On</button>
-        <button type="button" class="seg-btn ${!on ? 'active' : ''}" onclick="setTaskProp('${t.id}', 'act4_on_drop', false); renderTaskBuilder()">Off</button>
-      </div>`;
-    fields.push(field('Auto-clear Act 4 on relic drop', onOffSeg));
-    if (t.act4_on_drop) {
-      const runsSeg = `
-        <div class="seg-toggle">
-          <button type="button" class="seg-btn ${t.act4_mode !== 'until_locked' ? 'active' : ''}" onclick="setTaskProp('${t.id}', 'act4_mode', 'once'); renderTaskBuilder()">Once</button>
-          <button type="button" class="seg-btn ${t.act4_mode === 'until_locked' ? 'active' : ''}" onclick="setTaskProp('${t.id}', 'act4_mode', 'until_locked'); renderTaskBuilder()">Until locked</button>
-        </div>`;
-      fields.push(field('Act 4 Runs', runsSeg));
-      const act4MacroSel = `
-        <select class="task-select" onchange="setTaskProp('${t.id}', 'act4_macro', this.value)">
-          <option value="">No Macro</option>
-          ${taskTemplates.map(n => `<option value="${escapeHtml(n)}" ${n === t.act4_macro ? 'selected' : ''}>&#9654; ${escapeHtml(n)}</option>`).join('')}
-        </select>`;
-      fields.push(field('Act 4 Macro Operation', act4MacroSel));
-      // Act 4 gets its own play mode -- e.g. farm Solo but clear Act 4 in
-      // Matchmaking, or vice versa. Defaults to the task's own play mode until
-      // set (t.act4_play_mode absent -> runner falls back to t.play_mode).
-      const act4Play = t.act4_play_mode || t.play_mode;
-      const act4PlaySeg = `
-        <div class="seg-toggle">
-          <button type="button" class="seg-btn ${act4Play === 'solo' ? 'active' : ''}" onclick="setTaskProp('${t.id}', 'act4_play_mode', 'solo'); renderTaskBuilder()">Solo</button>
-          <button type="button" class="seg-btn ${act4Play === 'matchmaking' ? 'active' : ''}" onclick="setTaskProp('${t.id}', 'act4_play_mode', 'matchmaking'); renderTaskBuilder()">Matchmaking</button>
-        </div>`;
-      fields.push(field('Act 4 Play Mode', act4PlaySeg));
-    }
-  }
-
   const extractHint = t.mode === 'expedition'
     ? `<div class="wh-hint">"Extract After" is how many extract prompts to skip before actually taking one -- 0 extracts at the first node, higher goes deeper (and takes longer) per run.</div>` : '';
   const infiniteHint = (t.mode === 'story' && t.stage === 'Infinite')
-    ? `<div class="wh-hint"><b>Stop After Wave</b> completes the wave you enter, waits for the counter to advance once, then uses Leave Stage and returns to the lobby. For example, 20 leaves when wave 21 begins.</div>` : '';
-  const act4Hint = (t.mode === 'event' && t.stage !== '4' && t.act4_on_drop)
-    ? `<div class="wh-hint">When a Crow Relic drops on a win, the run leaves this stage, clears Act 4 (Crow - Dawn) with its own Macro Operation above, then comes back. <b>Once</b> spends one relic; <b>Until locked</b> spends every banked relic. Give Act 4 its own Macro Operation ${'&#8212;'} it plays nothing like Acts 1-3.</div>` : '';
+    ? `<div class="wh-hint"><b>Stop After Wave</b> completes the wave you enter, waits for the counter to advance once, then leaves when the next wave begins. For example, 20 leaves when wave 21 begins.</div>` : '';
   el.innerHTML = `
     <div class="task-builder-grid">${fields.join('')}</div>
     ${extractHint}
     ${infiniteHint}
-    ${act4Hint}
     <div class="wh-hint" style="margin-top: 8px;">The macro's Team Loadout comes from its template (Macro Manager tab).</div>
     <div class="flex items-center gap-2" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);">
       <button class="task-toolbar-btn add" onclick="cloneTaskCard('${t.id}')">&#10697; Clone Task</button>
