@@ -314,7 +314,7 @@ ACT_ROW_HEIGHT = 129
 # (nav_select_stage + nav_start, or enter_matchmaking) the other modes share.
 # Summer Event: Tidal Siege mode selections.
 # Mirrors TASK_DATA.event.stages in ui/app.js.
-EVENT_BANNER_IMAGES = ("tidal_siege", "Villain_Invasion")
+EVENT_BANNER_IMAGES = ("tidal_siege",)
 EVENT_ACT_ORDER = ["Event Mode", "Portal Mode"]
 # Values are a tuple of candidate crops per mode (any match wins)
 EVENT_ACT_IMAGES = {
@@ -376,15 +376,6 @@ BOUNTY_MYTHIC_MAX_REROLLS = 100
 BOUNTY_MYTHIC_REROLL_SETTLE = 0.8
 BOUNTY_MYTHIC_REROLL_VERIFY_TIMEOUT = 4.0
 BOUNTY_MYTHIC_REROLL_POLL = 0.25
-
-# Villian Invasion Act 4 ("Crow - Dawn") relic gate. DROP_RELIC_IMAGE is the
-# Crow Relic reward shown on the Victory screen (relics only drop on a win) --
-# spotting it is what triggers a farm task's optional auto-divert to Act 4.
-# VILLIAN4_CLOSE_IMAGE is Act 4's locked card ("requires 1 Crow Relic / 0/1x
-# Owned"); seeing it means there's no relic to spend, so the divert backs out.
-DROP_RELIC_IMAGE = "drop_relic"
-VILLIAN4_CLOSE_IMAGE = "villian4_close"
-EVENT_ACT4_STAGE = "4"
 
 # Infinite/Mastery are locked to Hard in-game with no picker shown for them
 # (see ui/app.js's TASK_DATA.story comment) -- no difficulty click happens

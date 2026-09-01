@@ -5986,12 +5986,10 @@ const IMAGE_DESCRIPTIONS = {
   unit_exist: "Confirms a unit was actually placed on the field.",
   upgradeable: "A unit's info panel when it CAN be upgraded.",
   victory: "The Victory result screen -- how the macro knows a run was won.",
-  villian1: "Event Act 1's villain card (Solo/Matchmaking event entry).",
-  villian2: "Event Act 2's villain card (Solo/Matchmaking event entry).",
-  villain3: "Event Act 3's villain card -- scrolled into view if it's below the fold (Solo/Matchmaking event entry).",
-  villian4: "Event Act 4's villain card (Crow - Dawn) -- scrolled into view; clicked to enter Act 4.",
-  villian4_close: "Act 4's LOCKED card ('requires 1 Crow Relic', 0/1x Owned) -- means there's no relic to spend, so the Act 4 auto-divert backs out here.",
-  drop_relic: "The Crow Relic reward on the Victory screen -- spotting it is what triggers a farm task's optional auto-divert to Act 4.",
+  tidal_siege: "Summer Event: Tidal Siege banner on the Event menu.",
+  event_gamemode: "Mode Selection card inside Tidal Siege.",
+  event_mode: "Event Mode selection card in Tidal Siege.",
+  event_portal_mode: "Portal Mode selection card in Tidal Siege.",
   warning: "A warning popup that can block Start Game.",
 };
 // The map NAME is reused for two different images: a "UI" one (the map's name

@@ -174,8 +174,6 @@ _BUILTIN_DEFAULT_WALK_PATHS = {
     "Fairy King Forest": "Fairy King Forest",
     "King's Tomb": "Kings Tomb",
     "Spirit City Act3": "Spirit Act3",
-    "Event Act1": "Villian1",
-    "Event Act2": "Villian2",
 }
 
 

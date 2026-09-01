@@ -76,5 +76,5 @@ def test_reach_event_act_selected_backs_out_when_banner_missing(monkeypatch):
     monkeypatch.setattr(runner_module.time, "sleep", lambda seconds: None)
 
     assert runner._reach_event_act_selected(hwnd=456, stop_event=threading.Event(), act="Event Mode") is False
-    assert clicked == ["nav_event", "tidal_siege", "Villain_Invasion"]
+    assert clicked == ["nav_event", "tidal_siege"]
     assert backs == [456]
