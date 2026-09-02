@@ -113,7 +113,7 @@ def detect_template_dir(name: str) -> str:
 # game's flat, pixel-consistent UI art normally scores well above 0.9; a
 # borderline score like that is a different-but-similar-shaped button, not
 # noise to tolerate.
-DEFAULT_THRESHOLD = 0.90
+DEFAULT_THRESHOLD = 0.80
 
 # Per-search-name threshold overrides (Settings > General > Image Manager --
 # the sensitivity slider on each name). Lets someone lower the bar for a
