@@ -31,7 +31,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # auto-generated .spec file as an unescaped Python string literal
 # ("Cream's Macro..." breaks that file's own syntax). Nuitka took the name
 # as a plain filename argument, so this never came up there.
-EXE_NAME = "Creams Macro - Anime Expeditions"
+EXE_NAME = "Cream"
 
 # winforms.py imports win32 unconditionally even though edgechromium is the
 # backend actually used at runtime -- PyInstaller's own pywebview hook
