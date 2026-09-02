@@ -3289,11 +3289,8 @@ class Api:
     @staticmethod
     def _safe_image_name(name: str) -> str:
         """Search names double as folder/file names, so strip anything that
-        isn't alnum/space/dash/underscore/apostrophe (apostrophe allowed --
-        real map names like "King's Tomb" need it; core.templates' stricter
-        _safe_name has no such names to deal with) and any leading/trailing
-        dots so a name can't traverse out of its category folder."""
-        cleaned = re.sub(r"[^A-Za-z0-9 _\-']", "", name or "").strip().strip(".")
+        could be invalid on the filesystem or cause path traversal."""
+        cleaned = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "", str(name or "")).strip().strip(".")
         return cleaned
 
     @staticmethod
@@ -3390,15 +3387,12 @@ class Api:
             self._image_search_png = base64.b64decode(result["data_uri"].split(",", 1)[1])
         return result
 
-    def save_image_search_crop(self, category: str, name: str, x, y, w, h) -> dict:
+    def save_image_search_crop(self, category: str, name: str, x=0, y=0, w=0, h=0, data_uri: str = None) -> dict:
         # Crop the cached capture (see capture_image_search_screen) down to
         # the dragged box and save it as a variant image of `name`:
         # Assets/<category>/<name>/<name>.png if the name is brand new,
-        # otherwise <name>_altN.png beside the existing image(s). "_alt" on
-        # purpose, NOT the bare "_2"/"_3" style: numbered names like
-        # nav_start_game_2 are their own distinct search names in the runner
-        # (a different button, not a variant), so a saved variant must never
-        # be confusable with -- or collide with -- one of those.
+        # otherwise <name>_altN.png beside the existing image(s).
+        import base64
         import cv2
         import numpy as np
         from core import vision
@@ -3410,6 +3404,11 @@ class Api:
         if not name:
             return {"ok": False, "reason": "bad_name"}
         png = getattr(self, "_image_search_png", None)
+        if not png and data_uri and "," in data_uri:
+            try:
+                png = base64.b64decode(data_uri.split(",", 1)[1])
+            except Exception:
+                pass
         if not png:
             return {"ok": False, "reason": "no_capture"}
 
@@ -3417,14 +3416,15 @@ class Api:
         if image is None:
             return {"ok": False, "reason": "decode_failed"}
         ih, iw = image.shape[:2]
-        # Clamp the box to the frame -- a drag can start/end slightly outside
-        # the canvas image area and JS sends it through as-is.
-        x0, y0 = max(0, int(x)), max(0, int(y))
-        x1, y1 = min(iw, int(x) + int(w)), min(ih, int(y) + int(h))
-        if x1 - x0 < 4 or y1 - y0 < 4:
-            # Anything smaller than 4px a side is a misdrag, not a usable
-            # reference crop -- matching needs actual shape/edge content.
-            return {"ok": False, "reason": "too_small"}
+
+        # If w or h is non-positive or very small, default to full image bounds
+        if w is None or h is None or int(w) <= 0 or int(h) <= 0:
+            x0, y0, x1, y1 = 0, 0, iw, ih
+        else:
+            x0, y0 = max(0, int(x)), max(0, int(y))
+            x1, y1 = min(iw, int(x) + int(w)), min(ih, int(y) + int(h))
+            if x1 - x0 < 2 or y1 - y0 < 2:
+                x0, y0, x1, y1 = 0, 0, iw, ih
         crop = image[y0:y1, x0:x1]
 
         folder = os.path.join(root, name)
@@ -3435,10 +3435,7 @@ class Api:
             filename = f"{name}_alt{n}.png"
             n += 1
         path = os.path.join(folder, filename)
-        # imencode + plain write instead of cv2.imwrite -- imwrite silently
-        # fails on paths cv2 can't encode (and returns False rather than
-        # raising), while an ordinary open() write of the encoded bytes
-        # works for any path the OS accepts and raises loudly if not.
+        # imencode + plain write instead of cv2.imwrite
         ok, encoded = cv2.imencode(".png", crop)
         if not ok:
             return {"ok": False, "reason": "encode_failed"}
@@ -3449,8 +3446,9 @@ class Api:
         # tries the new image -- without this it wouldn't exist to the
         # matcher until an app restart (see vision.clear_template_cache).
         vision.clear_template_cache()
+        cat_label = IMAGE_MANAGER_CATEGORIES.get(category, (category, category))[1]
         self.push_log(f'[Images] Saved {os.path.join("Assets", IMAGE_MANAGER_CATEGORIES[category][0], name, filename)} '
-                      f'({x1 - x0}x{y1 - y0}px) -- image search will try it immediately.')
+                      f'({x1 - x0}x{y1 - y0}px) under {cat_label} -- image search will try it immediately.')
         return {"ok": True, "name": name, "entry": self._image_file_entry(path)}
 
     def delete_vision_template_image(self, category: str, name: str, filename: str) -> dict:

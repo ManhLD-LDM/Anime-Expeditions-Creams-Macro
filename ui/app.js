@@ -6473,17 +6473,13 @@ function drawImageCanvas() {
 
 function imUpdateReadout() {
   const el = document.getElementById('im-crop-readout');
-  el.textContent = imState.sel
+  el.textContent = (imState.sel && imState.sel.w >= 2 && imState.sel.h >= 2)
     ? `${imState.sel.w} × ${imState.sel.h}px at ${imState.sel.x}, ${imState.sel.y}`
-    : 'No selection';
+    : 'Full frame (or drag to crop)';
 }
 
 // Crop-canvas interactions: LEFT-drag draws the selection box, wheel zooms
-// toward the cursor (crops are often tiny -- a nav button is ~40px tall --
-// so zooming in before dragging is the normal flow, hence the hint text),
-// RIGHT-drag pans (left is taken by selection, unlike the Place Unit
-// canvas). Selection is stored in IMAGE pixels so zooming/panning after
-// drawing it doesn't move what gets saved.
+// toward the cursor, RIGHT-drag pans.
 (function () {
   const canvas = document.getElementById('im-canvas');
   if (!canvas) return;
@@ -6501,8 +6497,6 @@ function imUpdateReadout() {
   function toImagePoint(clientX, clientY) {
     const { cx, cy } = canvasPoint(clientX, clientY);
     return {
-      // Clamped to the image bounds so a drag that wanders off the edge
-      // still produces a valid, fully-inside crop box.
       x: Math.min(imState.naturalW, Math.max(0, (cx - imState.panX) / imState.zoom)),
       y: Math.min(imState.naturalH, Math.max(0, (cy - imState.panY) / imState.zoom)),
     };
@@ -6521,7 +6515,6 @@ function imUpdateReadout() {
     drawImageCanvas();
   }, { passive: false });
 
-  // Right-click pans, so its context menu would fire on every pan-release.
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
   canvas.addEventListener('mousedown', (e) => {
@@ -6566,8 +6559,6 @@ function imUpdateReadout() {
     panning = false;
     if (selecting) {
       selecting = false;
-      // A no-drag click clears the selection -- matches the "click empty
-      // space to deselect" instinct and removes a stray 0-size box.
       if (imState.sel && (imState.sel.w < 2 || imState.sel.h < 2)) imState.sel = null;
       drawImageCanvas();
       imUpdateReadout();
@@ -6577,37 +6568,56 @@ function imUpdateReadout() {
 
 async function saveImageCrop() {
   const btn = document.getElementById('im-save-btn');
-  const name = document.getElementById('im-save-name').value.trim();
-  if (!imState.sel || imState.sel.w < 4 || imState.sel.h < 4) {
-    addLog('[Images] Drag a box around the button/text first (at least 4x4px).');
+  const nameInput = document.getElementById('im-save-name');
+  const name = (nameInput ? nameInput.value : '').trim();
+
+  if (!imState.image) {
+    addLog('[Images] Please capture the Roblox screen first.');
+    if (btn) {
+      btn.textContent = 'No capture';
+      setTimeout(() => { btn.textContent = 'Save Crop'; }, 1500);
+    }
     return;
   }
+
   if (!name) {
-    addLog('[Images] Type or pick a name to save the crop under first.');
+    if (nameInput) {
+      nameInput.focus();
+      nameInput.style.borderColor = 'var(--rose)';
+      setTimeout(() => { nameInput.style.borderColor = ''; }, 2000);
+    }
+    addLog('[Images] Please enter a name for the image before saving.');
+    if (btn) {
+      btn.textContent = 'Name required';
+      setTimeout(() => { btn.textContent = 'Save Crop'; }, 1500);
+    }
     return;
   }
-  // Folder to save into: locked to the card's category when started from "+",
-  // or picked from the category dropdown, otherwise routed from the typed name
+
+  // If user did not drag a specific box, default to the whole image!
+  let sel = imState.sel;
+  if (!sel || sel.w < 2 || sel.h < 2) {
+    sel = { x: 0, y: 0, w: imState.naturalW || 1152, h: imState.naturalH || 756 };
+  }
+
   const catSel = document.getElementById('im-save-category');
   const chosenCat = (catSel && catSel.value !== 'auto') ? catSel.value : null;
   const catKey = chosenCat || imState.saveCategory || categoryForName(name) || 'external';
   const catLabel = (imState.data || []).find(c => c.key === catKey)?.label || catKey;
+
   btn.disabled = true;
   btn.textContent = 'Saving...';
   try {
+    const dataUri = (imState.image && imState.image.src) ? imState.image.src : null;
     const result = await pywebview.api.save_image_search_crop(
-      catKey, name, imState.sel.x, imState.sel.y, imState.sel.w, imState.sel.h);
-    if (!result.ok) {
-      addLog(`[Images] Save failed: ${result.reason || 'error'}`);
+      catKey, name, sel.x, sel.y, sel.w, sel.h, dataUri);
+    if (!result || !result.ok) {
+      addLog(`[Images] Save failed: ${(result && result.reason) || 'error'}`);
       btn.textContent = 'Failed';
     } else {
-      // Name the folder it went to -- a manually-typed name auto-routes, so
-      // this makes a wrong guess visible instead of silent.
-      addLog(`[Images] Saved "${name}" under ${catLabel}.`);
+      addLog(`[Images] Saved "${name}" under ${catLabel} (${sel.w}x${sel.h}px).`);
       btn.textContent = 'Saved!';
-      // Refresh the library data in the background but STAY in capture view
-      // with the screenshot up -- one capture usually yields several crops
-      // (e.g. a whole screen's worth of buttons) in a row.
+      if (nameInput) nameInput.value = '';
       refreshImageManagerData();
       imState.sel = null;
       drawImageCanvas();
