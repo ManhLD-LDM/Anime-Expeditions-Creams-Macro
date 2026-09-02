@@ -4138,9 +4138,9 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
 
         self._set_status(action="Opening Floor stage...")
         if self._click_found_image(hwnd, "Floor", TOWER_SCREEN_TIMEOUT, stop_event) is None:
-            # Fallback to direct tower center click (center of diamond in reference space)
+            # Fallback to direct tower diamond center click (in reference space)
             self._log("[Macro] Floor badge template not found -- clicking tower center fallback.")
-            sx, sy = vision.ref_to_screen(hwnd, 588, 385)
+            sx, sy = vision.ref_to_screen(hwnd, 678, 300)
             self._mouse.click(sx, sy)
         self._log("[Macro] Found Floor card -- waiting for select stage...")
         time.sleep(SETTLE_DELAY)
