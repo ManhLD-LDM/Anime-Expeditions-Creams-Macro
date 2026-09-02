@@ -1187,11 +1187,10 @@ class BlockOps:
         ys, xs = np.where(valid_mask)
         if len(xs) == 0:
             return None
-        # Where the requested spot sits inside the (possibly shifted) box.
-        cx, cy = orig_x - box_x, orig_y - box_y
-        dists = (xs - cx) ** 2 + (ys - cy) ** 2
-        best = int(np.argmin(dists))
-        return int(xs[best]) - cx, int(ys[best]) - cy
+        # A valid tile highlight is confirmed inside the scan box. Return (0, 0) so the placement
+        # clicks directly at the exact saved coordinate (orig_x, orig_y) rather than drifting to
+        # an arbitrary perimeter pixel of the circular placement ring.
+        return 0, 0
 
     def _find_valid_place_spot(self, hwnd, stop_event: threading.Event, left: int, top: int,
                                  orig_x: int, orig_y: int, name: str):
@@ -1350,11 +1349,16 @@ class BlockOps:
                            f'skipping this block.')
                 return
 
+            # Position the mouse over the target coordinate first so the unit placement
+            # preview immediately spawns directly over the intended tile
+            self._mouse.move_to(left + orig_x, top + orig_y)
+            time.sleep(0.04)
+
             # Z first, always -- clears whatever the cursor/UI was last doing
             # so the hotkey press right after it reliably starts a fresh
             # placement instead of potentially colliding with leftover state.
             self._keyboard.tap(ord("Z"))
-            time.sleep(0.1)
+            time.sleep(0.08)
             self._log(f'[Macro] Place Unit "{name}": pressing hotkey "{hotkey}" -- entering placing mode.')
             self._keyboard.tap(vk)
             time.sleep(PLACE_HOTKEY_SETTLE)
