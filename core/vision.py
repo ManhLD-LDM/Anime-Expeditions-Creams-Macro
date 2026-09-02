@@ -285,23 +285,55 @@ def template_variant_paths(name: str, template_dir: str = UI_ASSETS_DIR) -> list
                     paths.append(candidate)
                     break
 
-    # If searching a standard directory, also check Assets/external/<name>
-    # so custom captures saved in the external folder are automatically searched.
+    # If searching a standard directory, also check Assets/external
+    # so custom captures saved in the external folder (or any subfolder inside it) are automatically searched.
     if template_dir != EXTERNAL_ASSETS_DIR and os.path.isdir(EXTERNAL_ASSETS_DIR):
+        primary_name = f"{name}.png".lower()
+        alt_prefix = f"{name}_alt".lower()
+
+        # 1. Check direct folder Assets/external/<name>
         ext_folder = os.path.join(EXTERNAL_ASSETS_DIR, name)
         if os.path.isdir(ext_folder):
-            ext_primary = f"{name}.png".lower()
             ext_entries = sorted(
                 (e for e in os.listdir(ext_folder) if e.lower().endswith(".png")),
-                key=lambda e: (e.lower() != ext_primary, e.lower()),
+                key=lambda e: (e.lower() != primary_name, e.lower()),
             )
             for e in ext_entries:
                 p = os.path.join(ext_folder, e)
                 if p not in paths:
                     paths.append(p)
+
+        # 2. Check loose file Assets/external/<name>.png and any root alt variants
         ext_loose = os.path.join(EXTERNAL_ASSETS_DIR, f"{name}.png")
         if os.path.isfile(ext_loose) and ext_loose not in paths:
             paths.append(ext_loose)
+        try:
+            for fname in os.listdir(EXTERNAL_ASSETS_DIR):
+                fl = fname.lower()
+                if fl.startswith(alt_prefix) and fl.endswith(".png"):
+                    p = os.path.join(EXTERNAL_ASSETS_DIR, fname)
+                    if p not in paths:
+                        paths.append(p)
+        except OSError:
+            pass
+
+        # 3. Check any custom subfolder inside Assets/external/ (e.g. Assets/external/Test/lobby.png)
+        try:
+            for sub in sorted(os.listdir(EXTERNAL_ASSETS_DIR), key=str.lower):
+                sub_path = os.path.join(EXTERNAL_ASSETS_DIR, sub)
+                if os.path.isdir(sub_path) and sub.lower() != name.lower():
+                    sub_matches = []
+                    for fname in os.listdir(sub_path):
+                        fl = fname.lower()
+                        if fl == primary_name or (fl.startswith(alt_prefix) and fl.endswith(".png")):
+                            sub_matches.append(fname)
+                    sub_matches.sort(key=lambda e: (e.lower() != primary_name, e.lower()))
+                    for sm in sub_matches:
+                        p = os.path.join(sub_path, sm)
+                        if p not in paths:
+                            paths.append(p)
+        except OSError:
+            pass
 
     _template_cache[cache_key] = paths
     return paths

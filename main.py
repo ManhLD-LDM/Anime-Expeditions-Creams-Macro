@@ -3304,47 +3304,110 @@ class Api:
             b64 = base64.b64encode(f.read()).decode("ascii")
         return {"file": os.path.basename(path), "data_uri": "data:image/png;base64," + b64}
 
+    def get_external_folders(self) -> dict:
+        """Returns the list of custom subfolders inside Assets/external."""
+        ext_dir = os.path.join(constants.ASSETS_DIR, "external")
+        folders = []
+        if os.path.isdir(ext_dir):
+            for entry in sorted(os.listdir(ext_dir), key=str.lower):
+                if os.path.isdir(os.path.join(ext_dir, entry)):
+                    folders.append(entry)
+        return {"ok": True, "folders": folders}
+
+    def create_external_folder(self, folder_name: str) -> dict:
+        """Creates a new subfolder inside Assets/external."""
+        safe_name = self._safe_image_name(folder_name)
+        if not safe_name:
+            return {"ok": False, "reason": "bad_folder_name"}
+        ext_dir = os.path.join(constants.ASSETS_DIR, "external")
+        os.makedirs(ext_dir, exist_ok=True)
+        folder_path = os.path.join(ext_dir, safe_name)
+        try:
+            os.makedirs(folder_path, exist_ok=True)
+            self.push_log(f'[Images] Created external folder "{safe_name}".')
+            return {"ok": True, "folder": safe_name}
+        except OSError as exc:
+            return {"ok": False, "reason": str(exc)}
+
     def list_vision_templates(self) -> dict:
         # The Image Manager's library view: every search name in every
         # category with a thumbnail of each of its variant images. Reads the
         # folder fresh on every call (no cache) -- the whole point of this
         # screen is showing what's REALLY on disk right now, including files
         # the user just dropped in by hand.
+        import re
         categories = []
         for key, (sub, label) in IMAGE_MANAGER_CATEGORIES.items():
             root = os.path.join(constants.ASSETS_DIR, sub)
             names = []
+            folders_list = []
             if os.path.isdir(root):
-                for entry in sorted(os.listdir(root), key=str.lower):
-                    full = os.path.join(root, entry)
-                    try:
-                        if os.path.isdir(full):
-                            # Folder-per-name layout: primary crop
-                            # (<name>.png) first, extras alphabetically --
-                            # same try-order core.vision uses, so the UI
-                            # shows them in the order they get matched.
-                            primary = f"{entry}.png".lower()
-                            files = sorted(
-                                (f for f in os.listdir(full) if f.lower().endswith(".png")),
-                                key=lambda f: (f.lower() != primary, f.lower()),
-                            )
-                            if files:
+                if key == "external":
+                    for entry in sorted(os.listdir(root), key=str.lower):
+                        full = os.path.join(root, entry)
+                        try:
+                            if os.path.isdir(full):
+                                folders_list.append(entry)
+                                pngs = [f for f in os.listdir(full) if f.lower().endswith(".png")]
+                                grouped = {}
+                                for f in pngs:
+                                    stem = f[:-4]
+                                    m = re.match(r"^(.*?)(_alt\d+)?$", stem, re.IGNORECASE)
+                                    base = m.group(1) if m else stem
+                                    grouped.setdefault(base, []).append(f)
+                                for base, files in sorted(grouped.items(), key=lambda x: x[0].lower()):
+                                    primary = f"{base}.png".lower()
+                                    sorted_files = sorted(
+                                        files,
+                                        key=lambda f: (f.lower() != primary, f.lower())
+                                    )
+                                    names.append({
+                                        "name": base,
+                                        "folder": entry,
+                                        "display_name": f"{entry} / {base}",
+                                        "images": [self._image_file_entry(os.path.join(full, f)) for f in sorted_files],
+                                    })
+                            elif entry.lower().endswith(".png"):
+                                stem = entry[:-4]
+                                m = re.match(r"^(.*?)(_alt\d+)?$", stem, re.IGNORECASE)
+                                base = m.group(1) if m else stem
                                 names.append({
-                                    "name": entry,
-                                    "images": [self._image_file_entry(os.path.join(full, f)) for f in files],
+                                    "name": base,
+                                    "folder": "",
+                                    "display_name": base,
+                                    "images": [self._image_file_entry(full)],
+                                    "loose": True,
                                 })
-                        elif entry.lower().endswith(".png"):
-                            # Loose legacy/hand-dropped file -- still a valid
-                            # single-variant name (see template_variant_paths
-                            # rule 1), shown the same as a one-image folder.
-                            names.append({
-                                "name": entry[:-4],
-                                "images": [self._image_file_entry(full)],
-                                "loose": True,
-                            })
-                    except OSError:
-                        continue  # unreadable entry -- skip it rather than kill the whole listing
-            categories.append({"key": key, "label": label, "names": names})
+                        except OSError:
+                            continue
+                else:
+                    for entry in sorted(os.listdir(root), key=str.lower):
+                        full = os.path.join(root, entry)
+                        try:
+                            if os.path.isdir(full):
+                                primary = f"{entry}.png".lower()
+                                files = sorted(
+                                    (f for f in os.listdir(full) if f.lower().endswith(".png")),
+                                    key=lambda f: (f.lower() != primary, f.lower()),
+                                )
+                                if files:
+                                    names.append({
+                                        "name": entry,
+                                        "images": [self._image_file_entry(os.path.join(full, f)) for f in files],
+                                    })
+                            elif entry.lower().endswith(".png"):
+                                names.append({
+                                    "name": entry[:-4],
+                                    "images": [self._image_file_entry(full)],
+                                    "loose": True,
+                                })
+                        except OSError:
+                            continue
+            cat_obj = {"key": key, "label": label, "names": names}
+            if key == "external":
+                cat_obj["folders"] = folders_list
+            categories.append(cat_obj)
+
         # Attach each name's current match threshold (its override, or the
         # default) so the Image Manager can show/edit the sensitivity slider.
         from core import vision
@@ -3387,11 +3450,9 @@ class Api:
             self._image_search_png = base64.b64decode(result["data_uri"].split(",", 1)[1])
         return result
 
-    def save_image_search_crop(self, category: str, name: str, x=0, y=0, w=0, h=0, data_uri: str = None) -> dict:
+    def save_image_search_crop(self, category: str, name: str, x=0, y=0, w=0, h=0, data_uri: str = None, folder_name: str = None) -> dict:
         # Crop the cached capture (see capture_image_search_screen) down to
-        # the dragged box and save it as a variant image of `name`:
-        # Assets/<category>/<name>/<name>.png if the name is brand new,
-        # otherwise <name>_altN.png beside the existing image(s).
+        # the dragged box and save it into the target folder.
         import base64
         import cv2
         import numpy as np
@@ -3427,14 +3488,30 @@ class Api:
                 x0, y0, x1, y1 = 0, 0, iw, ih
         crop = image[y0:y1, x0:x1]
 
-        folder = os.path.join(root, name)
-        os.makedirs(folder, exist_ok=True)
-        filename = f"{name}.png"
-        n = 2
-        while os.path.exists(os.path.join(folder, filename)):
-            filename = f"{name}_alt{n}.png"
-            n += 1
-        path = os.path.join(folder, filename)
+        target_folder = self._safe_image_name(folder_name) if folder_name else None
+
+        if category == "external":
+            if target_folder:
+                dest_dir = os.path.join(root, target_folder)
+            else:
+                dest_dir = root
+            os.makedirs(dest_dir, exist_ok=True)
+            filename = f"{name}.png"
+            n = 2
+            while os.path.exists(os.path.join(dest_dir, filename)):
+                filename = f"{name}_alt{n}.png"
+                n += 1
+            path = os.path.join(dest_dir, filename)
+        else:
+            dest_dir = os.path.join(root, name)
+            os.makedirs(dest_dir, exist_ok=True)
+            filename = f"{name}.png"
+            n = 2
+            while os.path.exists(os.path.join(dest_dir, filename)):
+                filename = f"{name}_alt{n}.png"
+                n += 1
+            path = os.path.join(dest_dir, filename)
+
         # imencode + plain write instead of cv2.imwrite
         ok, encoded = cv2.imencode(".png", crop)
         if not ok:
@@ -3447,11 +3524,11 @@ class Api:
         # matcher until an app restart (see vision.clear_template_cache).
         vision.clear_template_cache()
         cat_label = IMAGE_MANAGER_CATEGORIES.get(category, (category, category))[1]
-        self.push_log(f'[Images] Saved {os.path.join("Assets", IMAGE_MANAGER_CATEGORIES[category][0], name, filename)} '
-                      f'({x1 - x0}x{y1 - y0}px) under {cat_label} -- image search will try it immediately.')
-        return {"ok": True, "name": name, "entry": self._image_file_entry(path)}
+        folder_info = f" (folder '{target_folder}')" if target_folder else ""
+        self.push_log(f'[Images] Saved {filename} ({x1 - x0}x{y1 - y0}px) under {cat_label}{folder_info} -- image search will try it immediately.')
+        return {"ok": True, "name": name, "folder": target_folder or "", "entry": self._image_file_entry(path)}
 
-    def delete_vision_template_image(self, category: str, name: str, filename: str) -> dict:
+    def delete_vision_template_image(self, category: str, name: str, filename: str, folder_name: str = None) -> dict:
         # The library view's per-image delete. filename is basename-checked
         # (no separators/dots-only tricks) since it comes from JS; the empty
         # folder is removed too so a fully-cleared name disappears from the
@@ -3461,30 +3538,46 @@ class Api:
         if not root:
             return {"ok": False, "reason": "bad_category"}
         name = self._safe_image_name(name)
-        if (not name or not filename or os.path.basename(filename) != filename
+        if (not filename or os.path.basename(filename) != filename
                 or not filename.lower().endswith(".png")):
             return {"ok": False, "reason": "bad_name"}
-        path = os.path.join(root, name, filename)
-        if not os.path.isfile(path) and filename == f"{name}.png":
-            # A loose top-level file (legacy layout / hand-dropped) has no
-            # <name>/ folder -- fall back to deleting it directly.
-            path = os.path.join(root, filename)
-        try:
-            os.remove(path)
-        except OSError as exc:
-            return {"ok": False, "reason": str(exc)}
-        try:
-            folder = os.path.join(root, name)
-            if os.path.isdir(folder) and not os.listdir(folder):
-                os.rmdir(folder)
-        except OSError:
-            pass  # non-empty or locked -- fine, it just stays
+
+        target_folder = self._safe_image_name(folder_name) if folder_name else None
+        possible_paths = []
+        if target_folder:
+            possible_paths.append(os.path.join(root, target_folder, filename))
+        if name:
+            possible_paths.append(os.path.join(root, name, filename))
+        possible_paths.append(os.path.join(root, filename))
+
+        deleted = False
+        for p in possible_paths:
+            if os.path.isfile(p):
+                try:
+                    os.remove(p)
+                    deleted = True
+                    break
+                except OSError as exc:
+                    return {"ok": False, "reason": str(exc)}
+
+        if not deleted:
+            return {"ok": False, "reason": "file_not_found"}
+
+        # If it was in a standard category's dedicated folder, clean up if empty
+        if category != "external" and name:
+            try:
+                folder = os.path.join(root, name)
+                if os.path.isdir(folder) and not os.listdir(folder):
+                    os.rmdir(folder)
+            except OSError:
+                pass
+
         vision.clear_template_cache()
-        self.push_log(f"[Images] Deleted {filename} from {name}.")
+        self.push_log(f"[Images] Deleted {filename}.")
         return {"ok": True}
 
-    def rename_vision_template(self, category: str, old_name: str, new_name: str) -> dict:
-        """Rename an entire template folder (or loose template file) from old_name to new_name.
+    def rename_vision_template(self, category: str, old_name: str, new_name: str, folder_name: str = None) -> dict:
+        """Rename an image or entire template folder from old_name to new_name.
         Also renames variant filenames inside the folder so the primary image and alts match new_name,
         and migrates any per-image threshold override in configuration."""
         from core import vision
@@ -3498,46 +3591,72 @@ class Api:
         if old_safe == new_safe:
             return {"ok": True, "old_name": old_safe, "new_name": new_safe}
 
-        old_folder = os.path.join(root, old_safe)
-        new_folder = os.path.join(root, new_safe)
-        old_loose = os.path.join(root, f"{old_safe}.png")
-        new_loose = os.path.join(root, f"{new_safe}.png")
+        folder_safe = self._safe_image_name(folder_name) if folder_name else None
 
-        if os.path.exists(new_folder) or os.path.exists(new_loose):
-            return {"ok": False, "reason": "name_already_exists"}
+        if category == "external" and folder_safe:
+            parent_dir = os.path.join(root, folder_safe)
+            if not os.path.isdir(parent_dir):
+                return {"ok": False, "reason": "folder_not_found"}
 
-        renamed = False
-        if os.path.isdir(old_folder):
-            try:
-                os.rename(old_folder, new_folder)
-                renamed = True
-                # Rename individual files inside new_folder
-                for fname in sorted(os.listdir(new_folder)):
-                    if not fname.lower().endswith(".png"):
-                        continue
-                    old_fpath = os.path.join(new_folder, fname)
-                    # Replace old_safe prefix in filename if present
-                    if fname.startswith(old_safe):
-                        new_fname = new_safe + fname[len(old_safe):]
-                    else:
-                        new_fname = fname
-                    new_fpath = os.path.join(new_folder, new_fname)
-                    if old_fpath != new_fpath and not os.path.exists(new_fpath):
-                        try:
-                            os.rename(old_fpath, new_fpath)
-                        except OSError:
-                            pass
-            except OSError as exc:
-                return {"ok": False, "reason": str(exc)}
-        elif os.path.isfile(old_loose):
-            try:
-                os.rename(old_loose, new_loose)
-                renamed = True
-            except OSError as exc:
-                return {"ok": False, "reason": str(exc)}
+            old_primary = f"{old_safe}.png"
+            new_primary = f"{new_safe}.png"
+            if os.path.exists(os.path.join(parent_dir, new_primary)):
+                return {"ok": False, "reason": "name_already_exists"}
 
-        if not renamed:
-            return {"ok": False, "reason": "template_not_found"}
+            renamed_count = 0
+            for fname in sorted(os.listdir(parent_dir)):
+                if not fname.lower().endswith(".png"):
+                    continue
+                if fname.lower() == old_primary.lower() or fname.lower().startswith(f"{old_safe}_alt".lower()):
+                    old_path = os.path.join(parent_dir, fname)
+                    suffix = fname[len(old_safe):]
+                    new_path = os.path.join(parent_dir, f"{new_safe}{suffix}")
+                    try:
+                        os.rename(old_path, new_path)
+                        renamed_count += 1
+                    except OSError as exc:
+                        return {"ok": False, "reason": str(exc)}
+            if renamed_count == 0:
+                return {"ok": False, "reason": "template_not_found"}
+        else:
+            old_folder = os.path.join(root, old_safe)
+            new_folder = os.path.join(root, new_safe)
+            old_loose = os.path.join(root, f"{old_safe}.png")
+            new_loose = os.path.join(root, f"{new_safe}.png")
+
+            if os.path.exists(new_folder) or os.path.exists(new_loose):
+                return {"ok": False, "reason": "name_already_exists"}
+
+            renamed = False
+            if os.path.isdir(old_folder):
+                try:
+                    os.rename(old_folder, new_folder)
+                    renamed = True
+                    for fname in sorted(os.listdir(new_folder)):
+                        if not fname.lower().endswith(".png"):
+                            continue
+                        old_fpath = os.path.join(new_folder, fname)
+                        if fname.startswith(old_safe):
+                            new_fname = new_safe + fname[len(old_safe):]
+                        else:
+                            new_fname = fname
+                        new_fpath = os.path.join(new_folder, new_fname)
+                        if old_fpath != new_fpath and not os.path.exists(new_fpath):
+                            try:
+                                os.rename(old_fpath, new_fpath)
+                            except OSError:
+                                pass
+                except OSError as exc:
+                    return {"ok": False, "reason": str(exc)}
+            elif os.path.isfile(old_loose):
+                try:
+                    os.rename(old_loose, new_loose)
+                    renamed = True
+                except OSError as exc:
+                    return {"ok": False, "reason": str(exc)}
+
+            if not renamed:
+                return {"ok": False, "reason": "template_not_found"}
 
         # Migrate threshold override in config if present
         data = cfg.load()

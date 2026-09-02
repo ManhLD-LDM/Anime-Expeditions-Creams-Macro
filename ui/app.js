@@ -6065,11 +6065,76 @@ function closeImageManager() {
   restoreGameIfDashboard();  // closed while on the Dashboard (e.g. via the F6/F4 hotkeys) -- bring the game back
 }
 
+function onImSaveCategoryChange() {
+  const catSel = document.getElementById('im-save-category');
+  const folderWrap = document.getElementById('im-folder-wrap');
+  if (catSel && folderWrap) {
+    folderWrap.style.display = (catSel.value === 'external' || catSel.value === 'auto') ? 'flex' : 'none';
+  }
+}
+
+function onImSaveFolderChange() {
+  const folderSel = document.getElementById('im-save-folder');
+  const newFolderInput = document.getElementById('im-new-folder-input');
+  if (folderSel && newFolderInput) {
+    if (folderSel.value === '__new__') {
+      newFolderInput.style.display = '';
+      newFolderInput.focus();
+    } else {
+      newFolderInput.style.display = 'none';
+      newFolderInput.value = '';
+    }
+  }
+}
+
+function populateImFolderDropdown(folders, selectedFolder) {
+  const folderSel = document.getElementById('im-save-folder');
+  const newFolderInput = document.getElementById('im-new-folder-input');
+  if (!folderSel) return;
+  const prevVal = selectedFolder !== undefined ? selectedFolder : folderSel.value;
+  folderSel.innerHTML = '';
+
+  const rootOpt = document.createElement('option');
+  rootOpt.value = '';
+  rootOpt.textContent = '(No folder / Root)';
+  folderSel.appendChild(rootOpt);
+
+  const list = folders || [];
+  for (const f of list) {
+    const opt = document.createElement('option');
+    opt.value = f;
+    opt.textContent = `📁 ${f}`;
+    folderSel.appendChild(opt);
+  }
+
+  const newOpt = document.createElement('option');
+  newOpt.value = '__new__';
+  newOpt.textContent = '+ New Folder...';
+  folderSel.appendChild(newOpt);
+
+  if (prevVal && list.includes(prevVal)) {
+    folderSel.value = prevVal;
+  } else if (prevVal && prevVal !== '__new__') {
+    folderSel.value = '__new__';
+    if (newFolderInput) {
+      newFolderInput.style.display = '';
+      newFolderInput.value = prevVal;
+    }
+  } else {
+    folderSel.value = prevVal || '';
+  }
+  if (newFolderInput) {
+    newFolderInput.style.display = (folderSel.value === '__new__') ? '' : 'none';
+  }
+}
+
 async function refreshImageManagerData() {
   try {
     const result = await pywebview.api.list_vision_templates();
     imState.data = (result && result.ok) ? result.categories : [];
     imState.defaultThreshold = (result && result.default_threshold) || 0.90;
+    const extCat = (imState.data || []).find(c => c.key === 'external');
+    populateImFolderDropdown(extCat ? extCat.folders : []);
   } catch (e) {
     imState.data = [];
   }
@@ -6132,18 +6197,16 @@ function renderImageLibrary() {
   const el = document.getElementById('im-library');
   el.innerHTML = '';
   const filter = (document.getElementById('im-filter').value || '').toLowerCase();
-  // One combined list of BOTH folders instead of a per-tab view -- each item
-  // carries its own category so the +/delete buttons route to the right
-  // folder no matter what. Sorted by name (then category) so the two entries
-  // that share a map name land next to each other, their badges making the
-  // difference obvious.
   const items = [];
   for (const c of (imState.data || [])) {
     for (const n of c.names) {
-      if (n.name.toLowerCase().includes(filter)) items.push({ ...n, catKey: c.key, catLabel: c.label });
+      const matchText = (n.display_name || n.name || '').toLowerCase();
+      if (matchText.includes(filter)) {
+        items.push({ ...n, catKey: c.key, catLabel: c.label });
+      }
     }
   }
-  items.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.catKey.localeCompare(b.catKey));
+  items.sort((a, b) => (a.display_name || a.name).toLowerCase().localeCompare((b.display_name || b.name).toLowerCase()) || a.catKey.localeCompare(b.catKey));
   if (items.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'im-empty';
@@ -6167,8 +6230,13 @@ function renderImageLibrary() {
     badge.textContent = catKey === 'maps' ? 'Map' : catKey === 'detect' ? 'Detect' : catKey === 'external' ? 'Custom' : 'UI';
     const label = document.createElement('span');
     label.className = 'im-card-name';
-    label.textContent = n.name;
-    label.title = n.name;
+    if (catKey === 'external' && n.folder) {
+      label.textContent = `${n.folder} / ${n.name}`;
+      label.title = `Folder: ${n.folder} | Image: ${n.name}`;
+    } else {
+      label.textContent = n.name;
+      label.title = n.name;
+    }
     const count = document.createElement('span');
     count.className = 'im-card-count';
     count.textContent = n.images.length;
@@ -6177,12 +6245,12 @@ function renderImageLibrary() {
     add.className = 'im-card-add';
     add.textContent = '+';
     add.title = `Capture your Roblox screen and crop a new variant of "${n.name}"`;
-    add.addEventListener('click', () => startImageCapture(n.name, catKey));
+    add.addEventListener('click', () => startImageCapture(n.name, catKey, n.folder));
     const ren = document.createElement('span');
     ren.className = 'im-card-rename';
     ren.innerHTML = '&#9998;';
     ren.title = `Rename "${n.name}"`;
-    ren.addEventListener('click', () => openImRenameModal(catKey, n.name));
+    ren.addEventListener('click', () => openImRenameModal(catKey, n.name, n.folder));
     head.appendChild(badge);
     head.appendChild(label);
     head.appendChild(count);
@@ -6261,7 +6329,7 @@ function renderImageLibrary() {
       del.className = 'im-thumb-del';
       del.textContent = '×';
       del.title = 'Delete this image (click twice)';
-      del.addEventListener('click', () => deleteTemplateImage(catKey, n.name, img.file, del));
+      del.addEventListener('click', () => deleteTemplateImage(catKey, n.name, img.file, del, n.folder));
       wrap.appendChild(pic);
       wrap.appendChild(del);
       thumbs.appendChild(wrap);
@@ -6272,9 +6340,7 @@ function renderImageLibrary() {
 }
 
 // Two-step delete: first click arms the button (turns red), second click
-// within 2.5s actually deletes. Deliberately NOT a native confirm() -- those
-// render behind the docked Roblox window (same reason the path-name modal
-// exists, see index.html) and would look like the app locked up.
+// within 2.5s actually deletes.
 let imDeleteArmed = null;  // { el, timer } of the currently-armed delete, if any
 
 function imDisarmDelete() {
@@ -6284,7 +6350,7 @@ function imDisarmDelete() {
   imDeleteArmed = null;
 }
 
-async function deleteTemplateImage(catKey, name, file, el) {
+async function deleteTemplateImage(catKey, name, file, el, folderName) {
   if (!imDeleteArmed || imDeleteArmed.el !== el) {
     imDisarmDelete();
     el.classList.add('armed');
@@ -6293,7 +6359,7 @@ async function deleteTemplateImage(catKey, name, file, el) {
   }
   imDisarmDelete();
   try {
-    const result = await pywebview.api.delete_vision_template_image(catKey, name, file);
+    const result = await pywebview.api.delete_vision_template_image(catKey, name, file, folderName || null);
     if (!result.ok) {
       addLog(`[Images] Couldn't delete ${file}: ${result.reason || 'error'}`);
       return;
@@ -6305,12 +6371,12 @@ async function deleteTemplateImage(catKey, name, file, el) {
   await refreshImageManagerData();
 }
 
-let imRenameTarget = null; // { catKey, oldName }
+let imRenameTarget = null; // { catKey, oldName, folderName }
 
-function openImRenameModal(catKey, oldName) {
-  imRenameTarget = { catKey, oldName };
+function openImRenameModal(catKey, oldName, folderName) {
+  imRenameTarget = { catKey, oldName, folderName: folderName || null };
   const oldEl = document.getElementById('im-rename-old-name');
-  if (oldEl) oldEl.textContent = oldName;
+  if (oldEl) oldEl.textContent = folderName ? `${folderName} / ${oldName}` : oldName;
   const input = document.getElementById('im-rename-input');
   if (input) input.value = oldName;
   const modal = document.getElementById('im-rename-modal');
@@ -6332,7 +6398,7 @@ async function submitImRename() {
     addLog('[Images] Name cannot be empty.');
     return;
   }
-  const { catKey, oldName } = imRenameTarget;
+  const { catKey, oldName, folderName } = imRenameTarget;
   if (newName === oldName) {
     closeImRenameModal();
     return;
@@ -6343,7 +6409,7 @@ async function submitImRename() {
     btn.textContent = 'Renaming...';
   }
   try {
-    const result = await pywebview.api.rename_vision_template(catKey, oldName, newName);
+    const result = await pywebview.api.rename_vision_template(catKey, oldName, newName, folderName);
     if (!result || !result.ok) {
       addLog(`[Images] Rename failed: ${(result && result.reason) || 'error'}`);
     } else {
@@ -6361,11 +6427,6 @@ async function submitImRename() {
   }
 }
 
-// Same dance as usePlaceUnitRobloxScreen: the game only renders while the
-// Dashboard is showing, so hop there, let it paint a real frame, capture,
-// hop back. The modal stays open throughout (the game just paints over it
-// for a moment). prefillName comes from a card's "+" button -- straight to
-// cropping a new variant of that specific name.
 // Save a per-image match threshold (Image Manager slider). Updates imState
 // so the value survives a re-render without a full reload, and applies live.
 async function saveImageThreshold(name, value) {
@@ -6379,19 +6440,25 @@ async function saveImageThreshold(name, value) {
   } catch (e) {}
 }
 
-async function startImageCapture(prefillName, catKey) {
+async function startImageCapture(prefillName, catKey, prefillFolder) {
   // Ensure the modal is open
   const modal = document.getElementById('im-modal');
   if (modal) modal.style.display = 'flex';
 
-  imState.saveCategory = catKey || null;
+  imState.saveCategory = catKey || 'external';
   const catSel = document.getElementById('im-save-category');
   if (catSel) {
     catSel.value = catKey || 'external';
+    onImSaveCategoryChange();
+  }
+  if (prefillFolder !== undefined) {
+    const folderSel = document.getElementById('im-save-folder');
+    if (folderSel) {
+      folderSel.value = prefillFolder || '';
+      onImSaveFolderChange();
+    }
   }
   const returnScreen = currentScreen === 'dashboard' ? lastNonDashboardScreen : currentScreen;
-  // See usePlaceUnitRobloxScreen -- the game must actually show during
-  // this hop despite the open modal.
   captureDanceActive = true;
   let result = null;
   try {
@@ -6421,7 +6488,7 @@ async function startImageCapture(prefillName, catKey) {
     document.getElementById('im-library').style.display = 'none';
     document.getElementById('im-capture-wrap').style.display = '';
     document.getElementById('im-crop-readout').textContent = 'No selection';
-    updateDetectRegionButton();  // reveal "Use as region" if a Detect block is picking one
+    updateDetectRegionButton();
     drawImageCanvas();
   };
   img.src = result.data_uri;
@@ -6605,20 +6672,32 @@ async function saveImageCrop() {
   const catKey = chosenCat || imState.saveCategory || categoryForName(name) || 'external';
   const catLabel = (imState.data || []).find(c => c.key === catKey)?.label || catKey;
 
+  let folderName = '';
+  if (catKey === 'external' || catKey === 'auto') {
+    const folderSel = document.getElementById('im-save-folder');
+    const newFolderInput = document.getElementById('im-new-folder-input');
+    if (folderSel && folderSel.value === '__new__') {
+      folderName = (newFolderInput ? newFolderInput.value : '').trim();
+    } else if (folderSel) {
+      folderName = folderSel.value || '';
+    }
+  }
+
   btn.disabled = true;
   btn.textContent = 'Saving...';
   try {
     const dataUri = (imState.image && imState.image.src) ? imState.image.src : null;
     const result = await pywebview.api.save_image_search_crop(
-      catKey, name, sel.x, sel.y, sel.w, sel.h, dataUri);
+      catKey, name, sel.x, sel.y, sel.w, sel.h, dataUri, folderName);
     if (!result || !result.ok) {
       addLog(`[Images] Save failed: ${(result && result.reason) || 'error'}`);
       btn.textContent = 'Failed';
     } else {
-      addLog(`[Images] Saved "${name}" under ${catLabel} (${sel.w}x${sel.h}px).`);
+      const folderInfo = folderName ? ` in folder "${folderName}"` : '';
+      addLog(`[Images] Saved "${name}" under ${catLabel}${folderInfo} (${sel.w}x${sel.h}px).`);
       btn.textContent = 'Saved!';
       if (nameInput) nameInput.value = '';
-      refreshImageManagerData();
+      await refreshImageManagerData();
       imState.sel = null;
       drawImageCanvas();
       imUpdateReadout();
