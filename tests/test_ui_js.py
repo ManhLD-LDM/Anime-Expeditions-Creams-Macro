@@ -1014,7 +1014,7 @@ def test_all_four_settings_render_with_a_reason(tmp_path):
     body = out["html"]
     for name, value, reason in [("UI Scale", "1", "captured at 1"),
                                 ("Auto Sprint", "On", "sprint speed"),
-                                ("Show Match and Rewards", "Off", "covers"),
+                                ("Show Match and Rewards", "On", "result screen"),
                                 ("Auto Vote Start", "Off", "votes")]:
         assert name in body, f"{name} missing"
         assert f"<b>{value}</b>" in body, f"{name} does not state its required value"

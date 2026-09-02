@@ -8,12 +8,19 @@ LEAVE_MATCH = {"score": 1.0, "cx": 100, "cy": 100}
 RETURN_MATCH = {"score": 1.0, "cx": 200, "cy": 200}
 
 
+class DummyMouse:
+    def move_to(self, *args, **kwargs): pass
+    def click(self, *args, **kwargs): pass
+
+
 def _runner():
     runner = MacroRunner.__new__(MacroRunner)
-    runner._mouse = object()
+    runner._mouse = DummyMouse()
+    runner._coords = {"unit_info_reset_x": 0, "unit_info_reset_y": 0}
     runner._log = lambda _message: None
     runner._debug_save = lambda *_args: None
     runner._checkpoint = lambda _stop_event: False
+    runner._get_crafting_settings = lambda: {}
     return runner
 
 
@@ -119,3 +126,42 @@ def test_missing_return_to_lobby_remains_optional(monkeypatch):
 
     assert result is False
     assert clicks == []
+
+
+def test_handle_match_result_falls_back_to_leave_stage_and_reenters_lobby(monkeypatch):
+    """When repeat_stage is missing, _handle_match_result should gracefully
+    fall back to Leave Stage and return 'reenter_lobby' instead of failing."""
+    monkeypatch.setattr(runner_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(runner_module.wm, "get_window_rect_screen", lambda _hwnd: (100, 200, 300, 400))
+    runner = _runner()
+    runner._set_status = lambda **_kw: None
+    runner._note_win_for_crafting = lambda *_args: None
+    runner._release_quick_place_shift = lambda: None
+    runner._clear_result_obtainment_modal = lambda *_args: True
+    runner._dismiss_reward_card_if_found = lambda _hwnd: False
+    runner._relic_dropped = lambda _hwnd: False
+    runner._capture_result_screenshot = lambda _hwnd: None
+    runner._record_result = lambda *_args: None
+    runner._send_result_webhook = lambda *_args: None
+    runner._click_return_to_lobby_if_found = lambda *_args: True
+
+    clicked_targets = []
+
+    def mock_click_and_verify(_hwnd, _stop, image_name, _timeout, **_kw):
+        clicked_targets.append(image_name)
+        if image_name == "repeat_stage":
+            return False  # repeat_stage missing
+        if image_name == "leave_stage":
+            return True  # leave_stage fallback found
+        return False
+
+    runner._click_and_verify_gone = mock_click_and_verify
+
+    res = runner._handle_match_result(
+        123, threading.Event(), {"mode": "story", "map": "Spirit City"},
+        "win", "1m 30s", {}, repeat=True
+    )
+
+    assert res == "reenter_lobby"
+    assert clicked_targets == ["repeat_stage", "leave_stage"]
+

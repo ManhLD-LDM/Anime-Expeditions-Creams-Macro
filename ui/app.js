@@ -1629,8 +1629,8 @@ const INGAME_REQUIREMENTS = [
     why: 'Every reference image was captured at 1. At any other scale the macro is hunting for buttons that are the wrong size.' },
   { key: 'auto_sprint', name: 'Auto Sprint', value: 'On',
     why: 'The built-in walk paths are timed for sprint speed. With this off your character stops short, and units place in the wrong spot or not at all.' },
-  { key: 'match_rewards', name: 'Show Match and Rewards', value: 'Off',
-    why: 'It covers the part of the screen the macro reads after a match.' },
+  { key: 'match_rewards', name: 'Show Match and Rewards', value: 'On',
+    why: 'Required for the game to automatically open the match result screen with Victory/Defeat and the Repeat Stage button.' },
   { key: 'auto_vote', name: 'Auto Vote Start', value: 'Off',
     why: 'The macro votes at the right moment itself. Left on, rounds start before Pre Start has run.' },
 ];

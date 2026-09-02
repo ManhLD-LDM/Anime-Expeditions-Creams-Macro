@@ -1175,16 +1175,19 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                 # The bounded-Infinite path and the Leave-at-Minute block
                 # (left_live_match) already left the live match, so there is no
                 # Victory/Defeat screen to process here.
-                if not left_live_match and not self._handle_match_result(
+                match_result_status = True
+                if not left_live_match:
+                    match_result_status = self._handle_match_result(
                         hwnd, stop_event, task, result, duration, webhook,
                         repeat=(not is_last_repeat) and not challenge_wants_in
                         and not crafting_wants_in and not fuel_wants_in
                         and not auto_shop_wants_in
-                        and not restart_needed and not memory_refresh_wants_in):
-                    if stop_event.is_set():
-                        return False
-                    task_failed = True
-                    break
+                        and not restart_needed and not memory_refresh_wants_in)
+                    if not match_result_status:
+                        if stop_event.is_set():
+                            return False
+                        task_failed = True
+                        break
                 if self._checkpoint(stop_event):
                     return False
 
@@ -1363,10 +1366,10 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                     continue
 
                 if not is_last_repeat:
-                    if left_live_match or task.get("play_mode") == "matchmaking":
+                    if left_live_match or task.get("play_mode") == "matchmaking" or match_result_status == "reenter_lobby":
                         # Leave Stage (see _handle_match_result -- matchmaking
-                        # always leaves, never Repeat Stage), or the Infinite
-                        # wave-limit exit, puts us back in the lobby rather
+                        # always leaves, never Repeat Stage; or fallback when Repeat Stage was missing),
+                        # or the Infinite wave-limit exit, puts us back in the lobby rather
                         # than a repeat teleport -- re-enter from scratch.
                         if not self._run_task_setup(hwnd, stop_event, task, mode, map_name, coords,
                                                       scroll_power, scroll_nudges, webhook):
@@ -2028,6 +2031,16 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
             if defeat_match is not None:
                 self._log(f"[Macro] Defeat. (score {defeat_match['score']:.2f})")
                 return "loss"
+
+            try:
+                game_result_btn = vision.find_image(hwnd, "nav_game_result")
+            except vision.TemplateNotFound:
+                game_result_btn = None
+            if game_result_btn is not None:
+                self._log(f"[Macro] Found Game Result button (score {game_result_btn['score']:.2f}) -- clicking to open match result popup.")
+                vision.click_match(self._mouse, hwnd, game_result_btn)
+                time.sleep(0.5)
+
             time.sleep(MATCH_RESULT_POLL_INTERVAL)
         self._log(f'[Macro] Neither "victory" nor "defeat" matched within {MATCH_RESULT_TIMEOUT / 60:.0f} min. '
                    f'If the result screen was actually showing, its reference image isn\'t matching your '
@@ -2194,8 +2207,14 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                 repeat_label = "Repeat Stage"
             self._set_status(action=f"{label} -- clicking {repeat_label}...")
             if not self._click_and_verify_gone(hwnd, stop_event, repeat_image, NAV_CLICK_TIMEOUT):
-                self._log(f'[Macro] "{repeat_label}" not found -- can\'t continue this task\'s repeats, stopping.')
-                return False
+                self._log(f'[Macro] "{repeat_label}" not found -- falling back to Leave Stage and re-entering from lobby for next repeat.')
+                self._set_status(action=f"{label} -- clicking Leave Stage (fallback)...")
+                if not self._click_and_verify_gone(
+                        hwnd, stop_event, "leave_stage", NAV_CLICK_TIMEOUT, success_name="return"):
+                    self._log('[Macro] "Leave Stage" not found either -- stopping.')
+                    return False
+                self._click_return_to_lobby_if_found(hwnd, stop_event)
+                return "reenter_lobby"
             # _click_and_verify_gone only confirms the repeat_stage BUTTON
             # image is gone, not that the whole Victory/Defeat results panel
             # actually closed -- confirmed from a real capture: the button
