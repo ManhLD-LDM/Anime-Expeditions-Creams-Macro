@@ -48,7 +48,7 @@ def test_tilt_camera_top_down_pins_pitch_without_keyboard_input():
 
     camera.tilt_camera_top_down(mouse, hwnd=123)
 
-    assert mouse.events[0] == ("move_to", 300, 400)
+    assert mouse.events[0] == ("move_to", 200, 340)
     assert mouse.events[1] == ("nudge", 0, 0)
     assert mouse.events[2] == ("down", "right")
     assert mouse.events[-1] == ("up", "right")

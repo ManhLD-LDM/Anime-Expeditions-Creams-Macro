@@ -86,6 +86,9 @@ IMAGE_MANAGER_CATEGORIES = {
     # referenced by name from any Detect block (core/detect.py). Same
     # folder-per-name layout every other category uses -- Assets/detect/<name>/.
     "detect": ("detect", "Detection Images"),
+    # Custom / external user-captured images (e.g. for specific stages/setups).
+    # Assets/external/<name>/.
+    "external": ("external", "Custom / External"),
 }
 
 GUI_TITLE = "Cream's Macro | Anime Expeditions"
@@ -3481,6 +3484,75 @@ class Api:
         vision.clear_template_cache()
         self.push_log(f"[Images] Deleted {filename} from {name}.")
         return {"ok": True}
+
+    def rename_vision_template(self, category: str, old_name: str, new_name: str) -> dict:
+        """Rename an entire template folder (or loose template file) from old_name to new_name.
+        Also renames variant filenames inside the folder so the primary image and alts match new_name,
+        and migrates any per-image threshold override in configuration."""
+        from core import vision
+        root = self._image_manager_root(category)
+        if not root:
+            return {"ok": False, "reason": "bad_category"}
+        old_safe = self._safe_image_name(old_name)
+        new_safe = self._safe_image_name(new_name)
+        if not old_safe or not new_safe:
+            return {"ok": False, "reason": "bad_name"}
+        if old_safe == new_safe:
+            return {"ok": True, "old_name": old_safe, "new_name": new_safe}
+
+        old_folder = os.path.join(root, old_safe)
+        new_folder = os.path.join(root, new_safe)
+        old_loose = os.path.join(root, f"{old_safe}.png")
+        new_loose = os.path.join(root, f"{new_safe}.png")
+
+        if os.path.exists(new_folder) or os.path.exists(new_loose):
+            return {"ok": False, "reason": "name_already_exists"}
+
+        renamed = False
+        if os.path.isdir(old_folder):
+            try:
+                os.rename(old_folder, new_folder)
+                renamed = True
+                # Rename individual files inside new_folder
+                for fname in sorted(os.listdir(new_folder)):
+                    if not fname.lower().endswith(".png"):
+                        continue
+                    old_fpath = os.path.join(new_folder, fname)
+                    # Replace old_safe prefix in filename if present
+                    if fname.startswith(old_safe):
+                        new_fname = new_safe + fname[len(old_safe):]
+                    else:
+                        new_fname = fname
+                    new_fpath = os.path.join(new_folder, new_fname)
+                    if old_fpath != new_fpath and not os.path.exists(new_fpath):
+                        try:
+                            os.rename(old_fpath, new_fpath)
+                        except OSError:
+                            pass
+            except OSError as exc:
+                return {"ok": False, "reason": str(exc)}
+        elif os.path.isfile(old_loose):
+            try:
+                os.rename(old_loose, new_loose)
+                renamed = True
+            except OSError as exc:
+                return {"ok": False, "reason": str(exc)}
+
+        if not renamed:
+            return {"ok": False, "reason": "template_not_found"}
+
+        # Migrate threshold override in config if present
+        data = cfg.load()
+        thresholds = dict(data.get("image_thresholds", {}))
+        if old_safe in thresholds:
+            thresholds[new_safe] = thresholds.pop(old_safe)
+            cfg.update({"image_thresholds": thresholds})
+            vision.set_name_thresholds(thresholds)
+
+        vision.clear_template_cache()
+        cat_label = IMAGE_MANAGER_CATEGORIES.get(category, (category, category))[1]
+        self.push_log(f'[Images] Renamed "{old_safe}" to "{new_safe}" under {cat_label}.')
+        return {"ok": True, "old_name": old_safe, "new_name": new_safe}
 
     def install_tesseract(self) -> dict:
         # Settings > General > "Install Tesseract OCR": one-click install via

@@ -165,3 +165,28 @@ def test_template_load_handles_non_ascii_asset_paths(monkeypatch, tmp_path):
     assert len(loaded) == 1
     assert loaded[0][0].shape == (12, 16)
 
+
+def test_template_variant_paths_includes_external_assets(monkeypatch, tmp_path):
+    """Custom captures saved in Assets/external must be automatically discovered."""
+    ui_dir = tmp_path / "Assets" / "ui"
+    ui_dir.mkdir(parents=True)
+    ext_dir = tmp_path / "Assets" / "external"
+    ext_dir.mkdir(parents=True)
+
+    # Put a custom crop in external/custom_btn/custom_btn.png
+    custom_folder = ext_dir / "custom_btn"
+    custom_folder.mkdir()
+    (custom_folder / "custom_btn.png").write_bytes(b"png_bytes")
+    (custom_folder / "custom_btn_alt2.png").write_bytes(b"png_bytes_2")
+
+    monkeypatch.setattr(vision, "EXTERNAL_ASSETS_DIR", str(ext_dir))
+    vision.clear_template_cache()
+    try:
+        paths = vision.template_variant_paths("custom_btn", str(ui_dir))
+        assert len(paths) == 2
+        assert str(custom_folder / "custom_btn.png") in paths
+        assert str(custom_folder / "custom_btn_alt2.png") in paths
+    finally:
+        vision.clear_template_cache()
+
+

@@ -97,13 +97,17 @@ MAPS_DIR = os.path.join(constants.ASSETS_DIR, "maps")
 # also point at an existing built-in UI image without re-saving it.
 DETECT_ASSETS_DIR = os.path.join(constants.ASSETS_DIR, "detect")
 
+# Custom / external user-captured images (Image Manager > Custom / External).
+EXTERNAL_ASSETS_DIR = os.path.join(constants.ASSETS_DIR, "external")
+
 
 def detect_template_dir(name: str) -> str:
     """Which template folder a Detect-block image name lives in: its own
-    Assets/detect entry when one exists, otherwise Assets/ui. Lets a Detect
-    block reuse a built-in UI image by name without copying it into detect/."""
+    Assets/detect entry when one exists, otherwise Assets/external or Assets/ui."""
     if template_variant_paths(name, DETECT_ASSETS_DIR):
         return DETECT_ASSETS_DIR
+    if template_variant_paths(name, EXTERNAL_ASSETS_DIR):
+        return EXTERNAL_ASSETS_DIR
     return UI_ASSETS_DIR
 
 # Match-score cutoff (see find_in_gray for which method this is on). Was
@@ -280,6 +284,24 @@ def template_variant_paths(name: str, template_dir: str = UI_ASSETS_DIR) -> list
                 if os.path.isfile(candidate):
                     paths.append(candidate)
                     break
+
+    # If searching a standard directory, also check Assets/external/<name>
+    # so custom captures saved in the external folder are automatically searched.
+    if template_dir != EXTERNAL_ASSETS_DIR and os.path.isdir(EXTERNAL_ASSETS_DIR):
+        ext_folder = os.path.join(EXTERNAL_ASSETS_DIR, name)
+        if os.path.isdir(ext_folder):
+            ext_primary = f"{name}.png".lower()
+            ext_entries = sorted(
+                (e for e in os.listdir(ext_folder) if e.lower().endswith(".png")),
+                key=lambda e: (e.lower() != ext_primary, e.lower()),
+            )
+            for e in ext_entries:
+                p = os.path.join(ext_folder, e)
+                if p not in paths:
+                    paths.append(p)
+        ext_loose = os.path.join(EXTERNAL_ASSETS_DIR, f"{name}.png")
+        if os.path.isfile(ext_loose) and ext_loose not in paths:
+            paths.append(ext_loose)
 
     _template_cache[cache_key] = paths
     return paths

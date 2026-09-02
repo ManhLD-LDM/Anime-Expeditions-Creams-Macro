@@ -1636,6 +1636,14 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
   transition: color 0.15s, background 0.15s;
 }
 .im-card-add:hover { color: var(--brand); background: color-mix(in srgb, var(--brand) 14%, transparent); }
+.im-card-rename {
+  flex-shrink: 0; cursor: pointer;
+  width: 18px; height: 18px; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 11px; line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+.im-card-rename:hover { color: var(--lilac); background: color-mix(in srgb, var(--lilac) 14%, transparent); }
 /* Combined Image Manager: the two folders (UI buttons / map-select cards) are
    shown in ONE list now instead of separate tabs, so each card carries a badge
    saying where it's used -- and the same legend sits by the filter. */
@@ -1649,6 +1657,7 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 }
 .im-badge-ui { color: var(--brand); background: color-mix(in srgb, var(--brand) 16%, transparent); }
 .im-badge-map { color: var(--amber); background: color-mix(in srgb, var(--amber) 16%, transparent); }
+.im-badge-external { color: #10b981; background: color-mix(in srgb, #10b981 18%, transparent); }
 /* One-line "what this image is for" under the card head (see IMAGE_DESCRIPTIONS). */
 .im-card-desc {
   font-size: 9.5px; line-height: 1.35; color: var(--text-muted); margin: -2px 0 8px;

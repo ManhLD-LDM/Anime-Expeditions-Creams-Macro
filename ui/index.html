@@ -98,6 +98,12 @@
           <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
       </button>
+      <button id="nav-capture" onclick="startImageCapture()" class="nav-btn no-drag" data-tooltip="Capture Screen (F6)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </button>
     </div>
 
     <div class="flex items-center gap-4 no-drag">
@@ -2352,8 +2358,15 @@
           </div>
           <canvas id="im-canvas" class="pu-canvas" width="880" height="430"></canvas>
           <div class="flex items-center gap-2" style="margin-top: 10px;">
+            <select id="im-save-category" class="block-input" style="width: 145px;" title="Category folder to save this crop into">
+              <option value="auto">Auto Category</option>
+              <option value="external" selected>Custom / External</option>
+              <option value="ui">UI Buttons</option>
+              <option value="maps">Map Names</option>
+              <option value="detect">Detect Images</option>
+            </select>
             <input id="im-save-name" class="block-input" style="flex: 1;" type="text" list="im-name-list"
-                   placeholder="Save as... (pick an existing name to add a variant, or type a new one)">
+                   placeholder="Save as... (pick an existing name or type a new one, e.g. nav_start, Spirit City)">
             <!-- Existing names of the ACTIVE category -- picking one adds
                  the crop as an extra variant of that name; anything else
                  creates a brand-new name/folder. -->
@@ -2364,6 +2377,24 @@
           </div>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Image Template Rename modal ============ -->
+  <div id="im-rename-modal" class="modal-overlay" style="display:none;" onmousedown="if(event.target===this) closeImRenameModal()">
+    <div class="modal-panel" style="width: min(420px, 92vw);">
+      <div class="modal-head">
+        <span class="modal-title">Rename Image Template</span>
+        <span class="modal-close" onclick="closeImRenameModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div class="text-xs" style="color: var(--text-muted); margin-bottom: 8px;">Enter a new name for this template (<span id="im-rename-old-name" style="color:var(--text-dim);font-weight:600;"></span>):</div>
+        <input id="im-rename-input" class="block-input w-full" type="text" placeholder="New template name..." style="margin-bottom: 14px;" onkeydown="if(event.key==='Enter') submitImRename()">
+        <div class="flex items-center justify-end gap-2">
+          <button class="task-toolbar-btn" onclick="closeImRenameModal()">Cancel</button>
+          <button id="im-rename-submit-btn" class="pu-set-btn" onclick="submitImRename()">Rename</button>
+        </div>
       </div>
     </div>
   </div>

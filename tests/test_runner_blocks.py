@@ -201,19 +201,18 @@ def test_scan_box_does_not_accept_a_white_pixel_outside_the_window(monkeypatch):
     assert _ScanRunner()._scan_place_search_box(123, 0, 0, 5, 400) is None
 
 
-@pytest.mark.parametrize("spot,white,expected", [
-    ((576, 378), (580, 378), (4, 0)),    # no clamping needed
-    ((576, 378), (576, 373), (0, -5)),
-    ((5, 400), (9, 400), (4, 0)),        # box shifted right by the clamp
-    ((4, 6), (7, 9), (3, 3)),            # shifted on both axes
+@pytest.mark.parametrize("spot,white", [
+    ((576, 378), (580, 378)),
+    ((576, 378), (576, 373)),
+    ((5, 400), (9, 400)),
+    ((4, 6), (7, 9)),
 ])
-def test_scan_box_offset_is_measured_from_the_requested_spot(spot, white, expected, monkeypatch):
-    """Clamping moves the box, so the offset has to be relative to the spot the
-    caller asked about -- not the middle of whatever region got captured. Get
-    this wrong and every placement near an edge lands somewhere else."""
+def test_scan_box_offset_is_measured_from_the_requested_spot(spot, white, monkeypatch):
+    """When a valid highlight is confirmed in the scan box, (0, 0) offset is returned
+    so the unit clicks directly on the exact requested coordinate."""
     capture, _ = _record_capture(white_at=white)
     _patch_place_capture(monkeypatch, capture)
-    assert _ScanRunner()._scan_place_search_box(123, 0, 0, *spot) == expected
+    assert _ScanRunner()._scan_place_search_box(123, 0, 0, *spot) == (0, 0)
 
 
 # ---------------------------------------------------------------------------

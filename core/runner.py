@@ -3161,14 +3161,6 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
         didn't register); once it's gone, that's success -- keep waiting for
         nav_unitmanager instead of trying to click a button that isn't there.
         """
-        # Quick check if already in-game before starting the wait loop
-        try:
-            if vision.find_image(hwnd, "nav_unitmanager") is not None:
-                self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
-                return True
-        except vision.TemplateNotFound:
-            pass
-
         clicked = False
         for attempt in range(1, SOLO_START_RETRY_ATTEMPTS + 1):
             if self._checkpoint(stop_event):

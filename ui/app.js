@@ -6023,10 +6023,12 @@ function categoryForName(name) {
   const cats = imState.data || [];
   const inCat = (key) => (cats.find(c => c.key === key)?.names || []).some(n => n.name === name);
   const inUi = inCat('ui');
-  // A detect-only name routes to detect; a name already in detect keeps going
-  // there. Otherwise fall back to the old ui/maps rule.
+  // A custom/external, detect, or maps name already in that folder keeps going there
+  if (inCat('external') && !inUi) return 'external';
   if (inCat('detect') && !inUi) return 'detect';
-  return (inCat('maps') && !inUi) ? 'maps' : 'ui';
+  if (inCat('maps') && !inUi) return 'maps';
+  if (inUi) return 'ui';
+  return 'external';
 }
 
 // Hotkey entry point (Settings > Hotkeys > Image Manager, default F6,
@@ -6099,6 +6101,7 @@ function renderImageManagerTabs() {
     `<span class="im-badge im-badge-ui">UI</span>in-game buttons &amp; screens` +
     `<span class="im-badge im-badge-map">Map</span>map-select cards` +
     `<span class="im-badge im-badge-detect">Detect</span>Detect block images` +
+    `<span class="im-badge im-badge-external">Custom</span>Custom / External` +
     `</span>`;
 }
 
@@ -6157,13 +6160,11 @@ function renderImageLibrary() {
 
     const head = document.createElement('div');
     head.className = 'im-card-head';
-    // Where this image is used -- "UI" (in-game buttons/screens) or "Map"
-    // (map-select carousel cards). This is the whole point of the combined
-    // list: the same map name exists in both folders for different jobs.
+    // Where this image is used -- "UI", "Map", "Detect", or "Custom"
     const badge = document.createElement('span');
-    const badgeKind = catKey === 'maps' ? 'map' : catKey === 'detect' ? 'detect' : 'ui';
+    const badgeKind = catKey === 'maps' ? 'map' : catKey === 'detect' ? 'detect' : catKey === 'external' ? 'external' : 'ui';
     badge.className = `im-badge im-badge-${badgeKind}`;
-    badge.textContent = catKey === 'maps' ? 'Map' : catKey === 'detect' ? 'Detect' : 'UI';
+    badge.textContent = catKey === 'maps' ? 'Map' : catKey === 'detect' ? 'Detect' : catKey === 'external' ? 'Custom' : 'UI';
     const label = document.createElement('span');
     label.className = 'im-card-name';
     label.textContent = n.name;
@@ -6177,10 +6178,16 @@ function renderImageLibrary() {
     add.textContent = '+';
     add.title = `Capture your Roblox screen and crop a new variant of "${n.name}"`;
     add.addEventListener('click', () => startImageCapture(n.name, catKey));
+    const ren = document.createElement('span');
+    ren.className = 'im-card-rename';
+    ren.innerHTML = '&#9998;';
+    ren.title = `Rename "${n.name}"`;
+    ren.addEventListener('click', () => openImRenameModal(catKey, n.name));
     head.appendChild(badge);
     head.appendChild(label);
     head.appendChild(count);
     head.appendChild(add);
+    head.appendChild(ren);
     // When a Detect block opened the manager to pick an image, every card
     // gets a Use button that drops that name into the block.
     if (detectPickTarget) {
@@ -6298,6 +6305,62 @@ async function deleteTemplateImage(catKey, name, file, el) {
   await refreshImageManagerData();
 }
 
+let imRenameTarget = null; // { catKey, oldName }
+
+function openImRenameModal(catKey, oldName) {
+  imRenameTarget = { catKey, oldName };
+  const oldEl = document.getElementById('im-rename-old-name');
+  if (oldEl) oldEl.textContent = oldName;
+  const input = document.getElementById('im-rename-input');
+  if (input) input.value = oldName;
+  const modal = document.getElementById('im-rename-modal');
+  if (modal) modal.style.display = 'flex';
+  setTimeout(() => { if (input) { input.focus(); input.select(); } }, 50);
+}
+
+function closeImRenameModal() {
+  const modal = document.getElementById('im-rename-modal');
+  if (modal) modal.style.display = 'none';
+  imRenameTarget = null;
+}
+
+async function submitImRename() {
+  if (!imRenameTarget) return;
+  const input = document.getElementById('im-rename-input');
+  const newName = (input ? input.value : '').trim();
+  if (!newName) {
+    addLog('[Images] Name cannot be empty.');
+    return;
+  }
+  const { catKey, oldName } = imRenameTarget;
+  if (newName === oldName) {
+    closeImRenameModal();
+    return;
+  }
+  const btn = document.getElementById('im-rename-submit-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Renaming...';
+  }
+  try {
+    const result = await pywebview.api.rename_vision_template(catKey, oldName, newName);
+    if (!result || !result.ok) {
+      addLog(`[Images] Rename failed: ${(result && result.reason) || 'error'}`);
+    } else {
+      addLog(`[Images] Renamed "${oldName}" to "${newName}".`);
+      closeImRenameModal();
+      await refreshImageManagerData();
+    }
+  } catch (e) {
+    addLog('[Images] Rename failed.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Rename';
+    }
+  }
+}
+
 // Same dance as usePlaceUnitRobloxScreen: the game only renders while the
 // Dashboard is showing, so hop there, let it paint a real frame, capture,
 // hop back. The modal stays open throughout (the game just paints over it
@@ -6317,11 +6380,15 @@ async function saveImageThreshold(name, value) {
 }
 
 async function startImageCapture(prefillName, catKey) {
-  // catKey is set when this came from a specific card's "+" -- it locks the
-  // save to THAT card's folder so a variant can never land in the wrong one.
-  // The top "Capture Roblox" button passes nothing, and saveImageCrop then
-  // routes a manually-typed name via categoryForName instead.
+  // Ensure the modal is open
+  const modal = document.getElementById('im-modal');
+  if (modal) modal.style.display = 'flex';
+
   imState.saveCategory = catKey || null;
+  const catSel = document.getElementById('im-save-category');
+  if (catSel) {
+    catSel.value = catKey || 'external';
+  }
   const returnScreen = currentScreen === 'dashboard' ? lastNonDashboardScreen : currentScreen;
   // See usePlaceUnitRobloxScreen -- the game must actually show during
   // this hop despite the open modal.
@@ -6519,10 +6586,11 @@ async function saveImageCrop() {
     addLog('[Images] Type or pick a name to save the crop under first.');
     return;
   }
-  // Folder to save into: locked to the card's category when the capture was
-  // started from a card's "+", otherwise routed from the typed name (see
-  // categoryForName). Either way the user never has to pick a tab.
-  const catKey = imState.saveCategory || categoryForName(name);
+  // Folder to save into: locked to the card's category when started from "+",
+  // or picked from the category dropdown, otherwise routed from the typed name
+  const catSel = document.getElementById('im-save-category');
+  const chosenCat = (catSel && catSel.value !== 'auto') ? catSel.value : null;
+  const catKey = chosenCat || imState.saveCategory || categoryForName(name) || 'external';
   const catLabel = (imState.data || []).find(c => c.key === catKey)?.label || catKey;
   btn.disabled = true;
   btn.textContent = 'Saving...';

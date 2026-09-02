@@ -1,9 +1,15 @@
 import threading
+import pytest
 
 import numpy as np
 
 from core import runner_bounty
 from core.runner_bounty import BountyOps
+
+
+@pytest.fixture(autouse=True)
+def _isolate_bounty_vision(monkeypatch):
+    monkeypatch.setattr(runner_bounty.vision, "capture_game_bgr", lambda _hwnd: None)
 
 
 class _Harness(BountyOps):
