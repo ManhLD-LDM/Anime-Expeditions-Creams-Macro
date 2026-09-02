@@ -14,7 +14,7 @@ def test_rename_vision_template_success(tmp_path, monkeypatch):
     (folder / "my_stage_alt2.png").write_bytes(b"data2")
 
     monkeypatch.setattr(Api, "_image_manager_root", lambda self, cat: str(ext_dir) if cat == "external" else None)
-    
+
     api = Api()
     res = api.rename_vision_template("external", "my_stage", "spirit_city_custom")
     assert res["ok"] is True
@@ -40,7 +40,7 @@ def test_rename_vision_template_duplicate_rejected(tmp_path, monkeypatch):
     (folder2 / "stage2.png").write_bytes(b"data2")
 
     monkeypatch.setattr(Api, "_image_manager_root", lambda self, cat: str(ext_dir) if cat == "external" else None)
-    
+
     api = Api()
     res = api.rename_vision_template("external", "stage1", "stage2")
     assert res["ok"] is False
