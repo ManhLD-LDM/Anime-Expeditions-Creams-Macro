@@ -79,6 +79,7 @@ def run_camera_drag_hold(mouse, keyboard, hwnd, hold_ms: float = 2500, o_tap_ms:
     from . import keys
 
     tilt_camera_top_down(mouse, hwnd)
+    time.sleep(0.1)
 
     keyboard.key_down(keys.VK_LEFT)
     try:
@@ -93,3 +94,4 @@ def run_camera_drag_hold(mouse, keyboard, hwnd, hold_ms: float = 2500, o_tap_ms:
             time.sleep(max(0.0, o_tap_ms) / 1000)
         finally:
             keyboard.key_up(ord("O"))
+        time.sleep(0.1)
