@@ -3161,8 +3161,7 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
         didn't register); once it's gone, that's success -- keep waiting for
         nav_unitmanager instead of trying to click a button that isn't there.
         """
-        # If already teleported in-game (e.g. Raid or direct teleport where Select Stage teleports directly),
-        # nav_unitmanager is already visible on screen -- skip nav_start and proceed directly into battle.
+        # Quick check if already in-game before starting the wait loop
         try:
             if vision.find_image(hwnd, "nav_unitmanager") is not None:
                 self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
@@ -3176,26 +3175,18 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                 return False
 
             try:
-                if vision.find_image(hwnd, "nav_unitmanager") is not None:
-                    self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
-                    return True
-            except vision.TemplateNotFound:
-                pass
-
-            # wait_for_image, not a bare one-shot find_image: right after
-            # nav_select_stage is clicked, this screen is still mid-
-            # transition for a moment, and a single check timed unluckily
-            # can miss a button that's genuinely there a beat later. Only on
-            # a LATER attempt (clicked already) is a quick poll actually
-            # useful signal about whether it's really gone.
-            try:
                 start_match, start_name = vision.wait_for_image_any(
-                    hwnd, NAV_START_IMAGE_NAMES, timeout=SOLO_START_TIMEOUT, stop_event=stop_event)
+                    hwnd, ("nav_start", "nav_unitmanager"), timeout=SOLO_START_TIMEOUT, stop_event=stop_event)
             except vision.TemplateNotFound as exc:
                 self._log(f"[Macro] {exc}")
                 return False
             if self._checkpoint(stop_event):
                 return False
+
+            if start_name == "nav_unitmanager" and start_match is not None:
+                self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
+                return True
+
             if start_match is not None:
                 debug_path = self._debug_save(hwnd, start_name, start_match)
                 suffix = f" Debug: {debug_path}" if debug_path else ""
@@ -3204,15 +3195,6 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                 vision.click_match(self._mouse, hwnd, start_match)
                 clicked = True
             elif not clicked:
-                try:
-                    if vision.find_image(hwnd, "nav_unitmanager") is not None:
-                        self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
-                        return True
-                except vision.TemplateNotFound:
-                    pass
-                # Never managed to click it even once, and it's already
-                # gone -- this is the wrong screen entirely, not a slow
-                # teleport, so there's nothing to keep waiting on.
                 self._log(f'[Macro] "nav_start" not found within {SOLO_START_TIMEOUT:.0f}s -- the Start '
                            f'button never showed up (if it\'s visibly on screen, add your own crop of it '
                            f'via Settings > General > Image Manager). Stopping.')
