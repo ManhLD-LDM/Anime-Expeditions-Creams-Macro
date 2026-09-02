@@ -39,6 +39,10 @@ class TowerProbe:
         self.clicked.append((name, timeout))
         return {"score": 0.99}
 
+    def _scroll_find_and_click(self, _hwnd, names, _stop, *args, **kwargs):
+        self.clicked.append((names[0], 0))
+        return True
+
 
 def test_reach_tower_traitless_clicks_tower_then_traitless(monkeypatch):
     probe = TowerProbe()

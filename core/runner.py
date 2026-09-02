@@ -4109,7 +4109,11 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                 return False
 
         self._set_status(action="Clicking Tower...")
-        if self._click_found_image(hwnd, "nav_tower", TOWER_SCREEN_TIMEOUT, stop_event) is None:
+        scroll_power = task.get("scroll_power", stage_select.DEFAULT_SCROLL_POWER)
+        scroll_nudges = task.get("scroll_nudges", stage_select.SCROLL_NUDGES_PER_PASS)
+        if not self._scroll_find_and_click(hwnd, ("nav_tower",), stop_event,
+                                            scroll_power=scroll_power, scroll_nudges=scroll_nudges,
+                                            label="Tower"):
             self._spam_back_until_gone(hwnd, stop_event)
             return False
         if self._checkpoint(stop_event):

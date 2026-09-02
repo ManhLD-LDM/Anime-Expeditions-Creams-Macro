@@ -59,3 +59,8 @@ dist/
 # Personal Claude Code permission grants -- not team-wide.
 .claude/settings.local.json
 /.agents
+
+# User-created custom external crops (personal testing/custom crops)
+Assets/external/*
+!Assets/external/.gitkeep
+!Assets/external/README.txt
