@@ -19,8 +19,15 @@ def tilt_camera_top_down(mouse, hwnd) -> None:
     consumes raw mouse deltas while the right button is held and recenters the
     hidden cursor every frame.
     """
+    wm.activate_window(hwnd)
+    time.sleep(0.05)
     left, top, right, bottom = wm.get_window_rect_screen(hwnd)
-    cx, cy = (left + right) // 2, (top + bottom) // 2
+    w = max(1, right - left)
+    h = max(1, bottom - top)
+    # Target an empty 3D viewport area (25% from left, 35% from top) rather than
+    # dead center, so in-game UI modals (like "Start Game?") do not intercept the right-click.
+    cx = left + int(w * 0.25)
+    cy = top + int(h * 0.35)
     mouse.move_to(cx, cy)
     time.sleep(0.15)
     mouse.nudge()  # force a real hover event before the click lands

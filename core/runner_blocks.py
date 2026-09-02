@@ -1379,11 +1379,9 @@ class BlockOps:
             self._release_quick_place_shift()
             return
         if spot is None:
-            self._log(f'[Macro] Place Unit "{name}": no valid (white) tile found at ({orig_x}, {orig_y}) '
-                       f'or within {PLACE_SPIRAL_RADII[-1]}px around it -- giving up on this block.')
-            if not next_is_same_unit:
-                self._release_quick_place_shift()
-            return
+            self._log(f'[Macro] Place Unit "{name}": no valid highlight detected at ({orig_x}, {orig_y}) '
+                       f'-- falling back to clicking exact saved coordinate.')
+            spot = (orig_x, orig_y)
         cur_x, cur_y = spot
 
         self._mouse.click(left + cur_x, top + cur_y)

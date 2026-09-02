@@ -616,7 +616,7 @@ WARNING_POLL_INTERVAL = 1.0
 # then verify. Replaced the old click-first-then-check-a-rejection-image-
 # and-nudge approach -- this way a click only ever fires once a genuinely
 # valid tile is confirmed, instead of firing blind and finding out after.
-PLACE_VALID_PIXEL_TOLERANCE = 12  # each channel allowed to be this far under 0xff (white) -- antialiasing/compression can soften a genuinely-white tile just enough to miss an exact match
+PLACE_VALID_PIXEL_TOLERANCE = 25  # each channel allowed to be this far under 0xff (floor 230) -- works reliably on dark/tinted maps like Spirit City
 PLACE_SEARCH_BOX_SIZE = 38  # side length of the region captured/scanned around the saved spot (i.e. the saved spot +/-19px each way)
 PLACE_PIXEL_SEARCH_SETTLE = 0.03  # brief settle after each move before capturing
 # The placement-mode highlight overlay apparently needs to actually see the
