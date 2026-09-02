@@ -130,7 +130,7 @@ jobs:
           body: ${{ steps.changelog.outputs.body }}
           files: |
             dist/Creams-Macro-Anime-Expeditions-Windows.zip
-            dist/Creams Macro - Anime Expeditions.exe
+            dist/Cream.exe
 
       # Python script, not inline bash+jq -- the jq version sent Discord
       # invalid JSON (HTTP 400, code 50109) on the real runner the first
