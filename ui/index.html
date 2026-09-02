@@ -2294,6 +2294,7 @@
             <button class="task-toolbar-btn" onclick="backToPlaceUnitMapGrid()">&larr; Maps</button>
             <span class="text-[10px]" style="color: var(--text-muted);">Scroll to zoom &middot; drag to pan &middot; click to set position &middot; amber dots = units already placed</span>
             <span class="flex-1"></span>
+            <button id="pu-save-map-btn" class="task-toolbar-btn" style="display:none;" onclick="saveCurrentRobloxScreenAsMap()" title="Save this captured screen to Assets/map for future use">💾 Save As Map...</button>
             <span id="pu-pos-readout" class="task-chip">Not set</span>
           </div>
           <canvas id="pu-canvas" class="pu-canvas" width="760" height="440"></canvas>
@@ -2358,22 +2359,23 @@
           </div>
           <canvas id="im-canvas" class="pu-canvas" width="880" height="430"></canvas>
           <div class="flex items-center gap-2" style="margin-top: 10px;">
-            <select id="im-save-category" class="block-input" style="width: 135px;" title="Category folder to save this crop into" onchange="onImSaveCategoryChange()">
+            <select id="im-save-category" class="block-input" style="width: 165px;" title="Category folder to save this crop into" onchange="onImSaveCategoryChange()">
               <option value="external" selected>Custom / External</option>
+              <option value="map">Map (Set Position)</option>
               <option value="ui">UI Buttons</option>
               <option value="maps">Map Names</option>
               <option value="detect">Detect Images</option>
               <option value="auto">Auto Category</option>
             </select>
             <div id="im-folder-wrap" class="flex items-center gap-1" style="display:flex;">
-              <select id="im-save-folder" class="block-input" style="width: 140px;" title="Subfolder inside External (e.g. Test, Spirit City)" onchange="onImSaveFolderChange()">
+              <select id="im-save-folder" class="block-input" style="width: 140px;" title="Subfolder inside Category (e.g. Tower, Test, Spirit City)" onchange="onImSaveFolderChange()">
                 <option value="">(No folder / Root)</option>
                 <option value="__new__">+ New Folder...</option>
               </select>
               <input id="im-new-folder-input" class="block-input" style="width: 120px; display:none;" type="text" placeholder="Folder name..." title="Type name for new folder">
             </div>
             <input id="im-save-name" class="block-input" style="flex: 1;" type="text" list="im-name-list"
-                   placeholder="Image name (e.g. lobby, nav_start, boss)...">
+                   placeholder="Image name (e.g. lobby, Floor 1, boss)...">
             <!-- Existing names of the ACTIVE category -- picking one adds
                  the crop as an extra variant of that name; anything else
                  creates a brand-new name/folder. -->

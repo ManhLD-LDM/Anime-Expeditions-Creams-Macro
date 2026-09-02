@@ -9,18 +9,30 @@ import os
 from . import constants
 
 MAPS_DIR = os.path.join(constants.ASSETS_DIR, "map")
+EXTERNAL_DIR = os.path.join(constants.ASSETS_DIR, "external")
 
 _IMAGE_EXTS = (".png", ".jpg", ".jpeg")
 
 
 def list_categories() -> list:
-    if not os.path.isdir(MAPS_DIR):
-        return []
-    return sorted(d for d in os.listdir(MAPS_DIR) if os.path.isdir(os.path.join(MAPS_DIR, d)))
+    cats = []
+    if os.path.isdir(MAPS_DIR):
+        cats.extend(d for d in os.listdir(MAPS_DIR) if os.path.isdir(os.path.join(MAPS_DIR, d)))
+    if os.path.isdir(EXTERNAL_DIR):
+        for d in os.listdir(EXTERNAL_DIR):
+            full = os.path.join(EXTERNAL_DIR, d)
+            if os.path.isdir(full):
+                if any(f.lower().endswith(_IMAGE_EXTS) for f in os.listdir(full)):
+                    cats.append(f"External: {d}")
+    return sorted(set(cats), key=str.lower)
 
 
 def list_maps(category: str) -> list:
-    folder = os.path.join(MAPS_DIR, category)
+    if category.startswith("External:"):
+        sub = category.split(":", 1)[1].strip()
+        folder = os.path.join(EXTERNAL_DIR, sub)
+    else:
+        folder = os.path.join(MAPS_DIR, category)
     if not os.path.isdir(folder):
         return []
     return sorted(
@@ -30,7 +42,11 @@ def list_maps(category: str) -> list:
 
 
 def map_image_data_uri(category: str, name: str) -> str:
-    folder = os.path.join(MAPS_DIR, category)
+    if category.startswith("External:"):
+        sub = category.split(":", 1)[1].strip()
+        folder = os.path.join(EXTERNAL_DIR, sub)
+    else:
+        folder = os.path.join(MAPS_DIR, category)
     for ext in _IMAGE_EXTS:
         path = os.path.join(folder, f"{name}{ext}")
         if os.path.isfile(path):
@@ -39,3 +55,4 @@ def map_image_data_uri(category: str, name: str) -> str:
                 b64 = base64.b64encode(f.read()).decode("ascii")
             return f"data:{mime};base64,{b64}"
     return ""
+

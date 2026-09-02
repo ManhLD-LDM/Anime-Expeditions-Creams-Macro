@@ -5660,11 +5660,11 @@ async function usePlaceUnitRobloxScreen() {
     addLog(`[Macro Manager] Couldn't capture Roblox screen: ${(result && result.reason) || 'error'}`);
     return false;
   }
-  loadPlaceUnitImage(result.data_uri, reqId);
+  loadPlaceUnitImage(result.data_uri, reqId, true);
   return true;
 }
 
-function loadPlaceUnitImage(dataUri, expectedReqId) {
+function loadPlaceUnitImage(dataUri, expectedReqId, isRobloxScreen) {
   const reqId = expectedReqId || puRequestId;
   const img = new Image();
   img.onload = () => {
@@ -5675,15 +5675,60 @@ function loadPlaceUnitImage(dataUri, expectedReqId) {
     fitPlaceUnitCanvas();
     document.getElementById('pu-map-grid').style.display = 'none';
     document.getElementById('pu-canvas-wrap').style.display = '';
+    const saveBtn = document.getElementById('pu-save-map-btn');
+    if (saveBtn) saveBtn.style.display = isRobloxScreen ? '' : 'none';
     document.getElementById('pu-pos-readout').textContent = puState.markX != null ? `X ${puState.markX}, Y ${puState.markY}` : 'Not set';
     drawPlaceUnitCanvas();
   };
   img.src = dataUri;
 }
 
+async function saveCurrentRobloxScreenAsMap() {
+  if (!puState.image || !puState.image.src) {
+    addLog('[Set Position] No captured map to save.');
+    return;
+  }
+  const defaultCat = (puState.category && !puState.category.startsWith('External:')) ? puState.category : 'Tower';
+  const catInput = prompt('Enter Map Category / Folder (e.g. Tower, Story, Raid, Custom):', defaultCat);
+  if (!catInput || !catInput.trim()) return;
+  const mapNameInput = prompt('Enter Map Name (e.g. Floor 1, Stage 1, MyMap):', 'Floor 1');
+  if (!mapNameInput || !mapNameInput.trim()) return;
+
+  const btn = document.getElementById('pu-save-map-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+  }
+  try {
+    const result = await pywebview.api.save_map_snapshot(catInput.trim(), mapNameInput.trim(), puState.image.src);
+    if (!result || !result.ok) {
+      addLog(`[Set Position] Failed to save map: ${(result && result.reason) || 'error'}`);
+      if (btn) btn.textContent = 'Failed';
+    } else {
+      addLog(`[Set Position] Map saved to Assets/map/${catInput.trim()}/${mapNameInput.trim()}.png!`);
+      if (btn) btn.textContent = 'Saved!';
+      try {
+        puState.categories = await pywebview.api.list_map_categories();
+        renderPlaceUnitCategoryTabs();
+      } catch (e) {}
+    }
+  } catch (e) {
+    addLog('[Set Position] Failed to save map.');
+    if (btn) btn.textContent = 'Failed';
+  }
+  setTimeout(() => {
+    if (btn) {
+      btn.textContent = '💾 Save As Map...';
+      btn.disabled = false;
+    }
+  }, 1500);
+}
+
 function backToPlaceUnitMapGrid() {
   ++puRequestId;
   document.getElementById('pu-canvas-wrap').style.display = 'none';
+  const saveBtn = document.getElementById('pu-save-map-btn');
+  if (saveBtn) saveBtn.style.display = 'none';
   document.getElementById('pu-map-grid').style.display = '';
   puState.image = null;
 }
@@ -6065,11 +6110,19 @@ function closeImageManager() {
   restoreGameIfDashboard();  // closed while on the Dashboard (e.g. via the F6/F4 hotkeys) -- bring the game back
 }
 
-function onImSaveCategoryChange() {
+async function onImSaveCategoryChange() {
   const catSel = document.getElementById('im-save-category');
   const folderWrap = document.getElementById('im-folder-wrap');
   if (catSel && folderWrap) {
-    folderWrap.style.display = (catSel.value === 'external' || catSel.value === 'auto') ? 'flex' : 'none';
+    const isFolderCat = (catSel.value === 'external' || catSel.value === 'map' || catSel.value === 'auto');
+    folderWrap.style.display = isFolderCat ? 'flex' : 'none';
+    if (isFolderCat) {
+      try {
+        const targetCat = catSel.value === 'auto' ? 'external' : catSel.value;
+        const res = await pywebview.api.get_category_folders(targetCat);
+        populateImFolderDropdown((res && res.folders) ? res.folders : []);
+      } catch (e) {}
+    }
   }
 }
 
@@ -6133,8 +6186,10 @@ async function refreshImageManagerData() {
     const result = await pywebview.api.list_vision_templates();
     imState.data = (result && result.ok) ? result.categories : [];
     imState.defaultThreshold = (result && result.default_threshold) || 0.90;
-    const extCat = (imState.data || []).find(c => c.key === 'external');
-    populateImFolderDropdown(extCat ? extCat.folders : []);
+    const catSel = document.getElementById('im-save-category');
+    const curCatKey = (catSel && catSel.value !== 'auto') ? catSel.value : 'external';
+    const activeCat = (imState.data || []).find(c => c.key === curCatKey) || (imState.data || []).find(c => c.key === 'external');
+    populateImFolderDropdown(activeCat ? activeCat.folders : []);
   } catch (e) {
     imState.data = [];
   }
@@ -6147,7 +6202,7 @@ async function refreshImageManagerData() {
 }
 
 function renderImageManagerTabs() {
-  // No more UI/Maps tabs -- both folders are shown in one combined list
+  // No more UI/Maps tabs -- all folders are shown in one combined list
   // (renderImageLibrary), each card badged with where it's used, so there's
   // no tab to pick wrong. This spot now just holds the badge legend.
   const el = document.getElementById('im-category-tabs');
@@ -6164,7 +6219,7 @@ function renderImageManagerTabs() {
   el.innerHTML =
     `<span class="im-legend">` +
     `<span class="im-badge im-badge-ui">UI</span>in-game buttons &amp; screens` +
-    `<span class="im-badge im-badge-map">Map</span>map-select cards` +
+    `<span class="im-badge im-badge-map">Map</span>Map Backgrounds` +
     `<span class="im-badge im-badge-detect">Detect</span>Detect block images` +
     `<span class="im-badge im-badge-external">Custom</span>Custom / External` +
     `</span>`;
@@ -6225,12 +6280,12 @@ function renderImageLibrary() {
     head.className = 'im-card-head';
     // Where this image is used -- "UI", "Map", "Detect", or "Custom"
     const badge = document.createElement('span');
-    const badgeKind = catKey === 'maps' ? 'map' : catKey === 'detect' ? 'detect' : catKey === 'external' ? 'external' : 'ui';
+    const badgeKind = catKey === 'maps' ? 'map' : catKey === 'map' ? 'map' : catKey === 'detect' ? 'detect' : catKey === 'external' ? 'external' : 'ui';
     badge.className = `im-badge im-badge-${badgeKind}`;
-    badge.textContent = catKey === 'maps' ? 'Map' : catKey === 'detect' ? 'Detect' : catKey === 'external' ? 'Custom' : 'UI';
+    badge.textContent = catKey === 'maps' ? 'Map Name' : catKey === 'map' ? 'Map' : catKey === 'detect' ? 'Detect' : catKey === 'external' ? 'Custom' : 'UI';
     const label = document.createElement('span');
     label.className = 'im-card-name';
-    if (catKey === 'external' && n.folder) {
+    if ((catKey === 'external' || catKey === 'map') && n.folder) {
       label.textContent = `${n.folder} / ${n.name}`;
       label.title = `Folder: ${n.folder} | Image: ${n.name}`;
     } else {
@@ -6673,7 +6728,7 @@ async function saveImageCrop() {
   const catLabel = (imState.data || []).find(c => c.key === catKey)?.label || catKey;
 
   let folderName = '';
-  if (catKey === 'external' || catKey === 'auto') {
+  if (catKey === 'external' || catKey === 'map' || catKey === 'auto') {
     const folderSel = document.getElementById('im-save-folder');
     const newFolderInput = document.getElementById('im-new-folder-input');
     if (folderSel && folderSel.value === '__new__') {

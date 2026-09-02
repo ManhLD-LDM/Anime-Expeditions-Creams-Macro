@@ -80,15 +80,14 @@ REWARD_SCROLLBAR_COLOR = 0x373737
 # Assets/item_icons (reward icon matching) are different systems entirely
 # and deliberately not editable from here.
 IMAGE_MANAGER_CATEGORIES = {
+    "external": ("external", "Custom / External"),
+    "map": ("map", "Map Backgrounds (Set Position)"),
     "ui": ("ui", "UI Buttons"),
     "maps": ("maps", "Map Names"),
     # Reusable images the Detect block searches for. Saved once here, then
     # referenced by name from any Detect block (core/detect.py). Same
     # folder-per-name layout every other category uses -- Assets/detect/<name>/.
     "detect": ("detect", "Detection Images"),
-    # Custom / external user-captured images (e.g. for specific stages/setups).
-    # Assets/external/<name>/.
-    "external": ("external", "Custom / External"),
 }
 
 GUI_TITLE = "Cream's Macro | Anime Expeditions"
@@ -3304,30 +3303,36 @@ class Api:
             b64 = base64.b64encode(f.read()).decode("ascii")
         return {"file": os.path.basename(path), "data_uri": "data:image/png;base64," + b64}
 
-    def get_external_folders(self) -> dict:
-        """Returns the list of custom subfolders inside Assets/external."""
-        ext_dir = os.path.join(constants.ASSETS_DIR, "external")
+    def get_category_folders(self, category: str = "external") -> dict:
+        """Returns the list of custom subfolders inside Assets/<category>."""
+        root = self._image_manager_root(category) or os.path.join(constants.ASSETS_DIR, category)
         folders = []
-        if os.path.isdir(ext_dir):
-            for entry in sorted(os.listdir(ext_dir), key=str.lower):
-                if os.path.isdir(os.path.join(ext_dir, entry)):
+        if os.path.isdir(root):
+            for entry in sorted(os.listdir(root), key=str.lower):
+                if os.path.isdir(os.path.join(root, entry)):
                     folders.append(entry)
         return {"ok": True, "folders": folders}
 
-    def create_external_folder(self, folder_name: str) -> dict:
-        """Creates a new subfolder inside Assets/external."""
+    def create_category_folder(self, category: str, folder_name: str) -> dict:
+        """Creates a new subfolder inside Assets/<category>."""
         safe_name = self._safe_image_name(folder_name)
         if not safe_name:
             return {"ok": False, "reason": "bad_folder_name"}
-        ext_dir = os.path.join(constants.ASSETS_DIR, "external")
-        os.makedirs(ext_dir, exist_ok=True)
-        folder_path = os.path.join(ext_dir, safe_name)
+        root = self._image_manager_root(category) or os.path.join(constants.ASSETS_DIR, category)
+        os.makedirs(root, exist_ok=True)
+        folder_path = os.path.join(root, safe_name)
         try:
             os.makedirs(folder_path, exist_ok=True)
-            self.push_log(f'[Images] Created external folder "{safe_name}".')
+            self.push_log(f'[Images] Created folder "{safe_name}" under {category}.')
             return {"ok": True, "folder": safe_name}
         except OSError as exc:
             return {"ok": False, "reason": str(exc)}
+
+    def get_external_folders(self) -> dict:
+        return self.get_category_folders("external")
+
+    def create_external_folder(self, folder_name: str) -> dict:
+        return self.create_category_folder("external", folder_name)
 
     def list_vision_templates(self) -> dict:
         # The Image Manager's library view: every search name in every
@@ -3342,16 +3347,16 @@ class Api:
             names = []
             folders_list = []
             if os.path.isdir(root):
-                if key == "external":
+                if key in ("external", "map"):
                     for entry in sorted(os.listdir(root), key=str.lower):
                         full = os.path.join(root, entry)
                         try:
                             if os.path.isdir(full):
                                 folders_list.append(entry)
-                                pngs = [f for f in os.listdir(full) if f.lower().endswith(".png")]
+                                img_files = [f for f in os.listdir(full) if f.lower().endswith((".png", ".jpg", ".jpeg"))]
                                 grouped = {}
-                                for f in pngs:
-                                    stem = f[:-4]
+                                for f in img_files:
+                                    stem = os.path.splitext(f)[0]
                                     m = re.match(r"^(.*?)(_alt\d+)?$", stem, re.IGNORECASE)
                                     base = m.group(1) if m else stem
                                     grouped.setdefault(base, []).append(f)
@@ -3367,8 +3372,8 @@ class Api:
                                         "display_name": f"{entry} / {base}",
                                         "images": [self._image_file_entry(os.path.join(full, f)) for f in sorted_files],
                                     })
-                            elif entry.lower().endswith(".png"):
-                                stem = entry[:-4]
+                            elif entry.lower().endswith((".png", ".jpg", ".jpeg")):
+                                stem = os.path.splitext(entry)[0]
                                 m = re.match(r"^(.*?)(_alt\d+)?$", stem, re.IGNORECASE)
                                 base = m.group(1) if m else stem
                                 names.append({
@@ -3404,7 +3409,7 @@ class Api:
                         except OSError:
                             continue
             cat_obj = {"key": key, "label": label, "names": names}
-            if key == "external":
+            if key in ("external", "map"):
                 cat_obj["folders"] = folders_list
             categories.append(cat_obj)
 
@@ -3490,7 +3495,7 @@ class Api:
 
         target_folder = self._safe_image_name(folder_name) if folder_name else None
 
-        if category == "external":
+        if category in ("external", "map"):
             if target_folder:
                 dest_dir = os.path.join(root, target_folder)
             else:
@@ -3528,6 +3533,14 @@ class Api:
         self.push_log(f'[Images] Saved {filename} ({x1 - x0}x{y1 - y0}px) under {cat_label}{folder_info} -- image search will try it immediately.')
         return {"ok": True, "name": name, "folder": target_folder or "", "entry": self._image_file_entry(path)}
 
+    def save_map_snapshot(self, category: str, name: str, data_uri: str = None) -> dict:
+        """Saves a map snapshot directly into Assets/map/<category>/<name>.png."""
+        safe_cat = self._safe_image_name(category) or "Custom"
+        safe_name = self._safe_image_name(name)
+        if not safe_name:
+            return {"ok": False, "reason": "bad_name"}
+        return self.save_image_search_crop("map", safe_name, data_uri=data_uri, folder_name=safe_cat)
+
     def delete_vision_template_image(self, category: str, name: str, filename: str, folder_name: str = None) -> dict:
         # The library view's per-image delete. filename is basename-checked
         # (no separators/dots-only tricks) since it comes from JS; the empty
@@ -3539,7 +3552,7 @@ class Api:
             return {"ok": False, "reason": "bad_category"}
         name = self._safe_image_name(name)
         if (not filename or os.path.basename(filename) != filename
-                or not filename.lower().endswith(".png")):
+                or not filename.lower().endswith((".png", ".jpg", ".jpeg"))):
             return {"ok": False, "reason": "bad_name"}
 
         target_folder = self._safe_image_name(folder_name) if folder_name else None
@@ -3564,7 +3577,7 @@ class Api:
             return {"ok": False, "reason": "file_not_found"}
 
         # If it was in a standard category's dedicated folder, clean up if empty
-        if category != "external" and name:
+        if category not in ("external", "map") and name:
             try:
                 folder = os.path.join(root, name)
                 if os.path.isdir(folder) and not os.listdir(folder):
@@ -3593,7 +3606,7 @@ class Api:
 
         folder_safe = self._safe_image_name(folder_name) if folder_name else None
 
-        if category == "external" and folder_safe:
+        if category in ("external", "map") and folder_safe:
             parent_dir = os.path.join(root, folder_safe)
             if not os.path.isdir(parent_dir):
                 return {"ok": False, "reason": "folder_not_found"}
@@ -3605,7 +3618,7 @@ class Api:
 
             renamed_count = 0
             for fname in sorted(os.listdir(parent_dir)):
-                if not fname.lower().endswith(".png"):
+                if not fname.lower().endswith((".png", ".jpg", ".jpeg")):
                     continue
                 if fname.lower() == old_primary.lower() or fname.lower().startswith(f"{old_safe}_alt".lower()):
                     old_path = os.path.join(parent_dir, fname)
