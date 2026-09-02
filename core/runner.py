@@ -4125,23 +4125,24 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
             if self._click_found_image(hwnd, "Traitless_Tower", TOWER_SCREEN_TIMEOUT, stop_event) is None:
                 self._spam_back_until_gone(hwnd, stop_event)
                 return False
+            time.sleep(SETTLE_DELAY)
             self._log("[Macro] Traitless Tower selected.")
-            if self._click_found_image(hwnd, "Floor", TOWER_SCREEN_TIMEOUT, stop_event, TOWER_CARD_REGION) is None:
-                self._spam_back_until_gone(hwnd, stop_event)
-                return False
-            self._log("[Macro] Found Floor card -- waiting for select stage...")
         else:
-            # Ensure that normal mode is actually selected so that we don't go off to some random place.
+            # Ensure that normal mode is actually selected
             self._set_status(action="Selecting Normal...")
             if self._click_found_image(hwnd, "normal_tower", TOWER_SCREEN_TIMEOUT, stop_event) is None:
                 self._spam_back_until_gone(hwnd, stop_event)
                 return False
             time.sleep(SETTLE_DELAY)
             self._log("[Macro] Normal Tower selected.")
-            if self._click_found_image(hwnd, "Floor", TOWER_SCREEN_TIMEOUT, stop_event, region=TOWER_CARD_REGION) is None:
-                self._spam_back_until_gone(hwnd, stop_event)
-                return False
-            self._log("[Macro] Found Floor card -- waiting for select stage...")
+
+        self._set_status(action="Opening Floor stage...")
+        if self._click_found_image(hwnd, "Floor", TOWER_SCREEN_TIMEOUT, stop_event) is None:
+            # Fallback to direct tower center click (center of diamond in reference space)
+            self._log("[Macro] Floor badge template not found -- clicking tower center fallback.")
+            sx, sy = vision.ref_to_screen(hwnd, 588, 385)
+            self._mouse.click(sx, sy)
+        self._log("[Macro] Found Floor card -- waiting for select stage...")
         time.sleep(SETTLE_DELAY)
         return not self._checkpoint(stop_event)
 
@@ -4166,8 +4167,7 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
         nudges = scroll_nudges if scroll_nudges is not None else stage_select.SCROLL_NUDGES_PER_PASS
         scroll_step = -120 * max(1, int(power))
         nudges = max(0, int(nudges))
-        left, top, _, _ = wm.get_window_rect_screen(hwnd)
-        cx, cy = left + stage_select.SCROLL_CENTER[0], top + stage_select.SCROLL_CENTER[1]
+        cx, cy = vision.ref_to_screen(hwnd, stage_select.SCROLL_CENTER[0], stage_select.SCROLL_CENTER[1])
 
         for pass_no in range(1, stage_select.MAX_PASSES + 1):
             if self._checkpoint(stop_event):
@@ -4186,7 +4186,7 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                     debug_path = self._debug_save(hwnd, found, match)
                     suffix = f" Debug: {debug_path}" if debug_path else ""
                     self._log(f'[Macro] Found "{found}" (score {match["score"]:.2f}) -- clicking it.{suffix}')
-                    vision.click_match(self._mouse, hwnd, match)
+                    vision.click_match(self._mouse, hwnd, match, shuffle=True)
                     return True
                 if nudge < nudges:
                     self._mouse.move_to(cx, cy)
