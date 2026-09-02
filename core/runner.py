@@ -3170,37 +3170,36 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
             pass
 
         clicked = False
-        for _ in range(1, SOLO_START_RETRY_ATTEMPTS + 1):
+        for attempt in range(1, SOLO_START_RETRY_ATTEMPTS + 1):
             if self._checkpoint(stop_event):
                 return False
 
-            try:
-                start_match, start_name = vision.wait_for_image_any(
-                    hwnd, ("nav_start", "nav_unitmanager"), timeout=SOLO_START_TIMEOUT, stop_event=stop_event)
-            except vision.TemplateNotFound as exc:
-                self._log(f"[Macro] {exc}")
-                return False
-            if self._checkpoint(stop_event):
-                return False
+            if not clicked:
+                try:
+                    start_match, start_name = vision.wait_for_image_any(
+                        hwnd, ("nav_start", "nav_unitmanager"), timeout=5.0, stop_event=stop_event)
+                except vision.TemplateNotFound as exc:
+                    self._log(f"[Macro] {exc}")
+                    return False
+                if self._checkpoint(stop_event):
+                    return False
 
-            if start_name == "nav_unitmanager" and start_match is not None:
-                self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
-                return True
+                if start_name == "nav_unitmanager" and start_match is not None:
+                    self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
+                    return True
 
-            if start_match is not None:
-                debug_path = self._debug_save(hwnd, start_name, start_match)
-                suffix = f" Debug: {debug_path}" if debug_path else ""
-                self._log(f'[Macro] Found "{start_name}" (score {start_match["score"]:.2f}) -- clicking it.{suffix}')
-                self._set_status(action="Clicking Start...")
-                vision.click_match(self._mouse, hwnd, start_match)
-                clicked = True
-            elif not clicked:
-                self._log(f'[Macro] "nav_start" not found within {SOLO_START_TIMEOUT:.0f}s -- the Start '
-                           f'button never showed up (if it\'s visibly on screen, add your own crop of it '
-                           f'via Settings > General > Image Manager). Stopping.')
-                return False
+                if start_match is not None and start_name == "nav_start":
+                    debug_path = self._debug_save(hwnd, start_name, start_match)
+                    suffix = f" Debug: {debug_path}" if debug_path else ""
+                    self._log(f'[Macro] Found "{start_name}" (score {start_match["score"]:.2f}) -- clicking it.{suffix}')
+                    self._set_status(action="Clicking Start...")
+                    vision.click_match(self._mouse, hwnd, start_match)
+                    clicked = True
+                else:
+                    self._log('[Macro] Start button not found (or already loading) -- waiting for teleport in-game.')
             else:
                 self._log("[Macro] Start already clicked -- still teleporting, waiting longer.")
+
             if self._checkpoint(stop_event):
                 return False
 
@@ -3213,13 +3212,11 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                 self._log("[Macro] Teleported in-game.")
                 return True
             if result == "disconnected":
-                # Broken, not slow -- Roblox displayed its definite
-                # Reconnect/Retry prompt, so rejoin instead of retrying Start.
                 self._handle_disconnect(hwnd, stop_event, webhook, task)
                 return False
             if stop_event.is_set():
                 return False
-            self._log("[Macro] Didn't teleport yet -- checking again.")
+            self._log(f"[Macro] Didn't teleport yet (attempt {attempt}/{SOLO_START_RETRY_ATTEMPTS}) -- checking again.")
 
         self._log(f'[Macro] "nav_unitmanager" never matched across {SOLO_START_RETRY_ATTEMPTS} Start '
                    f'attempts -- never teleported in-game, stopping.')
