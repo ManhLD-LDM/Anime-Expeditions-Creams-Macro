@@ -81,7 +81,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force package | Out-Null
-          Copy-Item "dist/Creams Macro - Anime Expeditions.exe" package/
+          Copy-Item "dist/*.exe" package/
           Copy-Item Assets package/Assets -Recurse
           Compress-Archive -Path package/* -DestinationPath "dist/Creams-Macro-Anime-Expeditions-Windows.zip"
 
