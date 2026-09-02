@@ -3161,10 +3161,26 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
         didn't register); once it's gone, that's success -- keep waiting for
         nav_unitmanager instead of trying to click a button that isn't there.
         """
+        # If already teleported in-game (e.g. Raid or direct teleport where Select Stage teleports directly),
+        # nav_unitmanager is already visible on screen -- skip nav_start and proceed directly into battle.
+        try:
+            if vision.find_image(hwnd, "nav_unitmanager") is not None:
+                self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
+                return True
+        except vision.TemplateNotFound:
+            pass
+
         clicked = False
         for _ in range(1, SOLO_START_RETRY_ATTEMPTS + 1):
             if self._checkpoint(stop_event):
                 return False
+
+            try:
+                if vision.find_image(hwnd, "nav_unitmanager") is not None:
+                    self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
+                    return True
+            except vision.TemplateNotFound:
+                pass
 
             # wait_for_image, not a bare one-shot find_image: right after
             # nav_select_stage is clicked, this screen is still mid-
@@ -3188,6 +3204,12 @@ class MacroRunner(BountyOps, ChallengeOps, CraftingOps, FuelOps, ShopOps, Expedi
                 vision.click_match(self._mouse, hwnd, start_match)
                 clicked = True
             elif not clicked:
+                try:
+                    if vision.find_image(hwnd, "nav_unitmanager") is not None:
+                        self._log('[Macro] Teleported in-game ("nav_unitmanager" detected).')
+                        return True
+                except vision.TemplateNotFound:
+                    pass
                 # Never managed to click it even once, and it's already
                 # gone -- this is the wrong screen entirely, not a slow
                 # teleport, so there's nothing to keep waiting on.
